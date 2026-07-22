@@ -1,7 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
-from sqlalchemy import text
+from sqlalchemy import text, select
+from sqlalchemy.orm import Session
+from app.models.project import Project
+from app.models.engineer import Engineer
 
 app = FastAPI(
     title="StratOS AI",
@@ -23,23 +26,36 @@ def home():
 
 @app.get("/projects")
 def get_projects():
-    return [
-        {
-            "id": 1,
-            "name": "AT&T 5G Expansion",
-            "status": "In Progress"
-        },
-        {
-            "id": 2,
-            "name": "Verizon Fiber Deployment",
-            "status": "Completed"
-        },
-        {
-            "id": 3,
-            "name": "T-Mobile Network Modernization",
-            "status": "Planning"
-        }
-    ]
+    with Session(engine) as session:
+        statement = select(Project)
+        projects = session.execute(statement).scalars().all()
+        return [
+            {
+                "id": p.id,
+                "name": p.name,
+                "customer": p.customer,
+                "status": p.status,
+                "budget": float(p.budget)
+            }
+            for p in projects
+        ]
+@app.get("/engineers")
+def get_engineers():
+    with Session(engine) as session:
+        statement = select(Engineer)
+        engineers = session.execute(statement).scalars().all()
+        return [
+            {
+                "id": e.id,
+                "name": e.name,
+                "email": e.email,
+                "role": e.role,
+                "status": e.status,
+                "project_id": e.project_id
+            }
+            for e in engineers
+        ]
+
 @app.get("/db-test")
 def db_test():
     with engine.connect() as connection:

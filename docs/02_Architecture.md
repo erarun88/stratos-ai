@@ -135,11 +135,18 @@ graph TB
 #### Current Endpoints
 
 ```
-GET  /                 → Home message
-GET  /projects         → Retrieve all projects
-GET  /engineers        → Retrieve all engineers
-GET  /db-test          → Database connectivity test
+GET    /                              → Home message
+GET    /projects                      → Retrieve all projects
+GET    /engineers                     → Retrieve all engineers
+GET    /engineers/{id}                → Get engineer details
+POST   /engineers                     → Create new engineer
+PUT    /engineers/{id}                → Update engineer (full replacement)
+PATCH  /engineers/{id}/status         → Change engineer status (soft delete alternative)
+GET    /projects/{project_id}/engineers → Engineers assigned to a project
+GET    /db-test                       → Database connectivity test
 ```
+
+Engineers are never hard-deleted — `PATCH /engineers/{id}/status` is the only supported way to retire an engineer, preserving historical staffing data.
 
 #### Future Endpoints
 
@@ -148,11 +155,6 @@ POST   /projects            → Create new project
 GET    /projects/{id}       → Get project details
 PUT    /projects/{id}       → Update project
 DELETE /projects/{id}       → Delete project
-
-POST   /engineers           → Create new engineer
-GET    /engineers/{id}      → Get engineer details
-PUT    /engineers/{id}      → Update engineer
-DELETE /engineers/{id}      → Delete engineer
 
 POST   /assignments         → Assign engineer to project
 DELETE /assignments/{id}    → Remove assignment
@@ -442,6 +444,7 @@ backend/app/
 ├── main.py              # FastAPI application and routes
 ├── database.py          # Database connection setup
 ├── seed.py              # Sample data seeding
+├── schemas.py           # Pydantic request/response models (Engineer)
 └── models/
     ├── __init__.py      # Shared ORM Base
     ├── project.py       # Project ORM model
@@ -463,9 +466,6 @@ Planned Modules:
 ├── rag/                 # RAG Engine
 │   ├── retriever.py
 │   └── indexer.py
-├── schemas/             # Pydantic request/response models
-│   ├── project_schema.py
-│   └── engineer_schema.py
 ├── core/                # Core utilities
 │   ├── config.py
 │   └── constants.py
@@ -547,7 +547,7 @@ graph TD
 ### Short-term (3-6 months)
 - [ ] Async request handling for long-running operations
 - [ ] API versioning strategy
-- [ ] Request/response validation schemas (Pydantic)
+- [x] Request/response validation schemas (Pydantic) - ✅ Implemented for Engineer endpoints (`app/schemas.py`)
 - [ ] Service layer separation
 - [ ] Comprehensive error handling
 

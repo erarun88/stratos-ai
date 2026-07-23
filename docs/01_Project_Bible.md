@@ -83,6 +83,23 @@ StratOS AI addresses these challenges through:
 
 ---
 
+## Feature Inventory
+
+### Project Management
+- ✅ `GET /projects` — List all projects
+- 🔄 Full CRUD (`POST`/`GET /{id}`/`PUT`/`DELETE`) — Planned
+
+### Engineer Management
+- ✅ `GET /engineers` — List all engineers
+- ✅ `GET /engineers/{id}` — Get a single engineer (404 if not found)
+- ✅ `POST /engineers` — Create an engineer (validates project exists, email is unique, name is non-blank)
+- ✅ `PUT /engineers/{id}` — Full update of an engineer (same validations)
+- ✅ `PATCH /engineers/{id}/status` — Change status (`active` / `inactive` / `on_leave`)
+- ✅ `GET /projects/{project_id}/engineers` — List engineers assigned to a project
+- ❌ Hard delete — Intentionally not implemented; engineer records are never physically removed so staffing history is preserved. Use the status endpoint instead.
+
+---
+
 ## Target Users
 
 ### Primary Users

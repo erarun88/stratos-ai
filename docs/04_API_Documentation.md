@@ -427,11 +427,15 @@ GET /engineers?project_id=1&status=active&role=Backend%20Engineer&skip=0&limit=2
 
 #### POST /engineers
 
-**Status**: 🔄 Planned (Not implemented)
-
 **Description**: Create a new engineer
 
-**Authentication**: Required (planned)
+**Authentication**: None (planned: Required)
+
+**Validation**:
+- `project_id` must reference an existing project
+- `email` must be a valid, unique address
+- `name` is required and cannot be blank
+- `status` must be one of: `active`, `inactive`, `on_leave`
 
 **Request Body**:
 ```json
@@ -456,15 +460,32 @@ GET /engineers?project_id=1&status=active&role=Backend%20Engineer&skip=0&limit=2
 }
 ```
 
+**Request Example**:
+```bash
+curl -X POST http://localhost:8000/engineers \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Smith",
+    "email": "john.smith@stratos.ai",
+    "role": "Backend Engineer",
+    "status": "active",
+    "project_id": 1
+  }'
+```
+
+**Status Codes**:
+- `201`: Created
+- `400`: `project_id` does not exist
+- `409`: Email already exists
+- `422`: Validation error (blank name, invalid email, invalid status, missing field)
+
 ---
 
 #### GET /engineers/{id}
 
-**Status**: 🔄 Planned (Not implemented)
-
 **Description**: Retrieve specific engineer by ID
 
-**Authentication**: Required (planned)
+**Authentication**: None (planned: Required)
 
 **Request**:
 ```bash
@@ -483,13 +504,22 @@ curl http://localhost:8000/engineers/1
 }
 ```
 
+**Status Codes**:
+- `200`: Success
+- `404`: Engineer not found
+
 ---
 
 #### PUT /engineers/{id}
 
-**Status**: 🔄 Planned (Not implemented)
+**Description**: Update engineer information (full replacement of all fields)
 
-**Description**: Update engineer information
+**Authentication**: None (planned: Required)
+
+**Validation**:
+- Engineer must exist
+- `project_id` must reference an existing project
+- `email` must be unique (excluding the engineer being updated)
 
 **Request Body**:
 ```json
@@ -502,13 +532,131 @@ curl http://localhost:8000/engineers/1
 }
 ```
 
+**Response** (200 OK):
+```json
+{
+  "id": 1,
+  "name": "Alice Johnson",
+  "email": "alice.johnson@stratos.ai",
+  "role": "Tech Lead",
+  "status": "active",
+  "project_id": 2
+}
+```
+
+**Request Example**:
+```bash
+curl -X PUT http://localhost:8000/engineers/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alice Johnson",
+    "email": "alice.johnson@stratos.ai",
+    "role": "Tech Lead",
+    "status": "active",
+    "project_id": 2
+  }'
+```
+
+**Status Codes**:
+- `200`: Success
+- `400`: `project_id` does not exist
+- `404`: Engineer not found
+- `409`: Email already exists on another engineer
+- `422`: Validation error
+
+---
+
+#### PATCH /engineers/{id}/status
+
+**Description**: Change an engineer's status. Engineers are never physically deleted — this is the intended way to retire an engineer from active duty while preserving historical staffing data.
+
+**Authentication**: None (planned: Required)
+
+**Request Body**:
+```json
+{
+  "status": "on_leave"
+}
+```
+
+Allowed values: `active`, `inactive`, `on_leave`
+
+**Response** (200 OK):
+```json
+{
+  "id": 1,
+  "name": "Alice Johnson",
+  "email": "alice.johnson@stratos.ai",
+  "role": "Tech Lead",
+  "status": "on_leave",
+  "project_id": 2
+}
+```
+
+**Request Example**:
+```bash
+curl -X PATCH http://localhost:8000/engineers/1/status \
+  -H "Content-Type: application/json" \
+  -d '{"status": "on_leave"}'
+```
+
+**Status Codes**:
+- `200`: Success
+- `404`: Engineer not found
+- `422`: Invalid status value
+
 ---
 
 #### DELETE /engineers/{id}
 
-**Status**: 🔄 Planned (Not implemented)
+**Status**: ❌ Not implemented (by design)
 
-**Description**: Delete engineer record
+**Description**: Intentionally not offered. Deleting engineer records would destroy historical staffing data. Use `PATCH /engineers/{id}/status` to mark an engineer `inactive` instead.
+
+---
+
+#### GET /projects/{project_id}/engineers
+
+**Description**: Retrieve all engineers assigned to a given project
+
+**Authentication**: None (planned: Required)
+
+**Path Parameters**:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `project_id` | integer | Yes | Project ID |
+
+**Request**:
+```bash
+curl http://localhost:8000/projects/1/engineers
+```
+
+**Response** (200 OK):
+```json
+[
+  {
+    "id": 1,
+    "name": "Alice Johnson",
+    "email": "alice.johnson@stratos.ai",
+    "role": "Senior Engineer",
+    "status": "active",
+    "project_id": 1
+  },
+  {
+    "id": 2,
+    "name": "Bob Chen",
+    "email": "bob.chen@stratos.ai",
+    "role": "Backend Engineer",
+    "status": "active",
+    "project_id": 1
+  }
+]
+```
+
+**Status Codes**:
+- `200`: Success
+- `404`: Project not found
 
 ---
 
@@ -843,11 +991,16 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and breaking changes.
 
 - ✅ GET /projects - Implemented
 - ✅ GET /engineers - Implemented
+- ✅ GET /engineers/{id} - Implemented
+- ✅ POST /engineers - Implemented
+- ✅ PUT /engineers/{id} - Implemented
+- ✅ PATCH /engineers/{id}/status - Implemented
+- ❌ DELETE /engineers/{id} - Not planned (soft status management instead)
+- ✅ GET /projects/{project_id}/engineers - Implemented
 - ✅ GET / - Implemented
 - ✅ GET /db-test - Implemented
 - 🔄 POST /projects - Planned
 - 🔄 PUT/DELETE /projects/{id} - Planned
-- 🔄 CRUD /engineers - Planned
 - 📋 Analytics endpoints - Planned
 - 📋 WebSocket real-time updates - Planned
 - 📋 GraphQL API - Planned

@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - Development
 
 ### Added
+- Complete Engineer Management module:
+  - `GET /engineers/{id}` - Retrieve a single engineer (404 if not found)
+  - `POST /engineers` - Create an engineer, validating project existence, email uniqueness, and required fields
+  - `PUT /engineers/{id}` - Full update of an engineer, with the same validations
+  - `PATCH /engineers/{id}/status` - Soft status transition (`active` / `inactive` / `on_leave`) in place of a hard delete, preserving historical staffing data
+  - `app/schemas.py` - Pydantic request/response models (`EngineerCreate`, `EngineerUpdate`, `EngineerStatusUpdate`, `EngineerResponse`) and an `EngineerStatus` enum, wired up via `response_model` on all engineer endpoints for accurate Swagger docs
+  - `email-validator` dependency (required by Pydantic's `EmailStr`)
+- `backend/requirements.txt` - Pinned Python dependencies for reproducible installs
+- `backend/.env.example` - Documented required environment variables (`DATABASE_URL`)
+- Complete backend setup instructions in `README.md` (clone, venv, install, configure, run, seed, verify)
+- `GET /projects/{project_id}/engineers` - Retrieve all engineers assigned to a project (404 if project not found)
 - Database models for Projects and Engineers
 - RESTful API endpoints for data retrieval
 - SQLAlchemy ORM setup with PostgreSQL
@@ -32,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CORS allows all origins (not production-ready)
 - No authentication/authorization
 - Limited error handling
-- No input validation
+- No input validation for Projects (Engineers now validated via Pydantic schemas)
 - No logging infrastructure
 - Database queries not optimized with indexes
 

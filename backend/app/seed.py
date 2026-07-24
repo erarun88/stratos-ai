@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy.orm import Session
 from app.database import engine
 from app.models import Base
@@ -16,9 +18,39 @@ session.commit()
 
 # Add 3 projects
 projects = [
-    Project(id=1, name="CloudSync Platform", customer="TechCorp Inc.", status="active", budget=500000),
-    Project(id=2, name="DataVault Analytics", customer="FinanceFlow Ltd.", status="active", budget=750000),
-    Project(id=3, name="SecureNet Infrastructure", customer="GlobalSecurity Corp.", status="in_progress", budget=1200000),
+    Project(
+        id=1,
+        name="CloudSync Platform",
+        customer="TechCorp Inc.",
+        project_manager="Sarah Mitchell",
+        status="active",
+        start_date=date(2026, 1, 15),
+        end_date=date(2026, 12, 15),
+        description="Enterprise file synchronization and collaboration platform.",
+        budget=500000,
+    ),
+    Project(
+        id=2,
+        name="DataVault Analytics",
+        customer="FinanceFlow Ltd.",
+        project_manager="Daniel Okafor",
+        status="active",
+        start_date=date(2026, 3, 1),
+        end_date=date(2027, 2, 28),
+        description="Real-time financial analytics and reporting suite.",
+        budget=750000,
+    ),
+    Project(
+        id=3,
+        name="SecureNet Infrastructure",
+        customer="GlobalSecurity Corp.",
+        project_manager="Priya Nair",
+        status="planning",
+        start_date=date(2026, 6, 1),
+        end_date=None,
+        description="Zero-trust network infrastructure rollout.",
+        budget=1200000,
+    ),
 ]
 
 session.add_all(projects)

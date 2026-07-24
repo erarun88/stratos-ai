@@ -241,6 +241,210 @@ The rule of thumb: if Pydantic can check it without touching the database, it's 
 
 ---
 
+## 📚 New Concepts: Building the React Frontend Foundation
+
+Until now everything was backend. This feature adds the **frontend** — the part users actually see and click. It lives in its own `frontend/` folder and talks to the FastAPI backend over HTTP.
+
+### 13. Why a separate frontend, and how does it talk to the backend?
+
+**Simple Explanation**: The backend (FastAPI) is the kitchen — it stores data and does the work. The frontend (React) is the dining room — it's what customers see. They're separate programs that run on different ports:
+
+```
+React frontend  →  http://localhost:5173   (what you open in the browser)
+FastAPI backend →  http://localhost:8000   (data + logic)
+```
+
+The frontend asks the backend for data the same way `curl` does — with an HTTP request:
+
+```ts
+// frontend/src/api/engineers.ts
+fetch('http://localhost:8000/engineers')   // "give me all engineers"
+```
+
+Because they're on different ports, the browser treats them as different "origins" — which is exactly why the backend has **CORS** enabled (concept #7). Without it, the browser would block the request.
+
+### 14. What is React, and what is a "component"?
+
+**Simple Explanation**: React lets you build a UI out of reusable Lego bricks called **components**. Each component is a function that returns what to show on screen.
+
+```tsx
+function StatusBadge({ status }) {
+  return <span className="badge">{status}</span>
+}
+```
+
+Our app is a tree of components: `Layout` contains a `Sidebar` and the current `page`; the `Engineers` page contains a table of `StatusBadge`s. Small pieces, combined.
+
+### 15. What is "state", and why the loading / error / data pattern?
+
+**The Problem**: When the Engineers page opens, the data isn't there yet — it has to be fetched over the network, which takes time. What do we show meanwhile?
+
+**The Solution**: **State** is data a component remembers and re-renders when it changes. The Engineers page tracks three things:
+
+```tsx
+const [engineers, setEngineers] = useState([])   // the data
+const [loading, setLoading]     = useState(true) // still fetching?
+const [error, setError]         = useState(null) // did it fail?
+```
+
+This gives us the standard three-state UI every real app uses:
+- **Loading** → "Loading engineers…"
+- **Error** → "Could not load engineers. Is the backend running?"
+- **Success** → the table
+
+Beginners often forget the loading and error states and only handle the happy path — but a blank screen when the backend is down is a bad experience.
+
+### 16. What is `useEffect` (fetching when the page opens)?
+
+**Simple Explanation**: `useEffect` runs code *after* a component appears on screen. We use it to kick off the data fetch exactly once when the Engineers page loads:
+
+```tsx
+useEffect(() => {
+  getEngineers().then(setEngineers)
+}, [])   // the empty [] means "run once, on first render"
+```
+
+### 17. What is client-side routing (React Router)?
+
+**Simple Explanation**: In a traditional website, clicking a link reloads the whole page from the server. In a **single-page app**, React Router swaps the visible page *instantly* in the browser without a reload — the sidebar stays put and only the main area changes.
+
+```tsx
+<Route path="engineers" element={<Engineers />} />
+```
+
+This maps the URL `/engineers` to the `Engineers` component. The sidebar links (`Dashboard`, `Engineers`, `Projects`) just change the URL, and React Router shows the matching page.
+
+### 18. What is Tailwind CSS (utility classes)?
+
+**Simple Explanation**: Instead of writing separate CSS files, Tailwind gives you tiny single-purpose classes you combine directly in the markup:
+
+```tsx
+<button className="rounded-md bg-slate-900 px-4 py-2 text-white">
+  Add Engineer
+</button>
+```
+
+`bg-slate-900` = dark background, `px-4 py-2` = padding, `rounded-md` = rounded corners. It's fast to build with and keeps styling next to the element it applies to.
+
+### 19. Why are the Add / Edit / Change Status buttons "UI only"?
+
+**What We Learned**: We built the buttons and the table first, but deliberately did **not** wire the buttons to the `POST` / `PUT` / `PATCH` endpoints yet. Clicking them shows a "not implemented yet" notice.
+
+**Why do it this way?** It's a common enterprise approach — build the **foundation and layout** first so you can see and agree on the shape of the app, then wire up behavior feature-by-feature. It keeps each change small and reviewable (matching our "one feature at a time" principle).
+
+### 20. What is an environment variable in the frontend (`VITE_API_BASE_URL`)?
+
+**The Problem**: The backend URL is `http://localhost:8000` in development, but will be something else in production. We don't want to hard-code it.
+
+**The Solution**: Vite reads variables prefixed with `VITE_` from a `.env` file:
+
+```ts
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+```
+
+Same idea as the backend's `DATABASE_URL` (concept from "Environment Variables" below) — configuration lives outside the code.
+
+---
+
+## 📚 New Concepts: The Project Management Module (Full-Stack CRUD)
+
+This is the first feature built **end-to-end** — backend *and* a fully wired frontend. It's the template for every future module.
+
+### 21. What does "full-stack CRUD" actually mean here?
+
+We connected all four operations across both layers:
+
+| Action | HTTP | Backend route | Frontend trigger |
+|--------|------|---------------|------------------|
+| **C**reate | POST | `POST /projects` | "Add Project" modal |
+| **R**ead | GET | `GET /projects` | the table (on load) |
+| **U**pdate | PUT | `PUT /projects/{id}` | "Edit" modal |
+| status change | PATCH | `PATCH /projects/{id}/status` | "Change Status" modal |
+
+After every write, the frontend **re-fetches** the list (`loadProjects()`), so the table always reflects the real database — no guessing.
+
+### 22. Changing a live database table without losing data (migrations)
+
+**The Problem**: The `projects` table already existed with real rows (and engineers pointing at them via foreign key). We needed to *add* columns (`project_manager`, `start_date`, etc.). `Base.metadata.create_all()` only creates **missing tables** — it will not alter an existing one.
+
+**The Solution**: A small, **idempotent** migration script (`app/migrate.py`) using SQL that's safe to run repeatedly:
+```sql
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_manager VARCHAR;
+```
+`IF NOT EXISTS` means running it a second time does nothing — no crash. This is a hand-rolled stand-in for a real migration tool (Alembic), which the project will adopt later.
+
+**What I learned**: Never drop-and-recreate a table that has data or foreign keys. Add columns additively. We also relaxed the old `budget NOT NULL` constraint because the new module doesn't collect budget — a new row with no budget would otherwise fail to insert.
+
+### 23. Why keep `budget` even though the new spec doesn't mention it?
+
+Deleting a column throws away real data and breaks anything that already reads it. So `budget` stays in the database and in the API response as an **optional/legacy** field. **Backward compatibility** — don't break existing behavior when adding new behavior — is an enterprise default.
+
+### 24. Reuse: one Modal component, three uses
+
+The Add form, the Edit form, and the Change-Status dialog all share **one** `Modal` component (`components/ui/Modal.tsx`) that handles the overlay, the close button, and Escape-to-close. Each feature just supplies its own contents. Notice too that **Add and Edit are the same form component** (`ProjectFormModal`) — passing an existing `project` puts it in "edit" mode, passing nothing puts it in "create" mode. Build the generic piece once; configure it per use.
+
+### 25. Controlled forms and where validation happens (twice)
+
+The form inputs are **controlled** — React holds each field's value in state and updates it on every keystroke. On submit we send it to the API.
+
+Validation happens in **two places**, on purpose:
+- **Browser** (`required` attributes) — instant feedback, catches empty fields before any network call.
+- **Backend** (Pydantic) — the real gatekeeper. It re-checks everything (non-blank, valid status, `end_date >= start_date`) because a browser can be bypassed. When it rejects with `422`, our API helper extracts the message and the modal shows it in a red banner **without closing** — so the user can fix and retry.
+
+Rule: the frontend validates for *convenience*; the backend validates for *safety*. Never trust the client alone.
+
+### 26. Soft lifecycle again — projects are never deleted
+
+Just like engineers, there is **no** `DELETE /projects`. To retire a project you change its status to `completed` or `cancelled`. This keeps the full portfolio history intact for reporting and audits — the same "soft delete" reasoning from concept #11, applied to a project's whole lifecycle.
+
+---
+
+## 📚 New Concepts: The Executive Dashboard Module
+
+The Engineers and Projects modules answer "show me the list." The Dashboard answers "give me the **summary**" — the numbers an executive glances at. That's a different kind of query.
+
+### 27. Aggregation queries: counting in the database, not in Python
+
+**The naive way**: fetch every project, loop in Python, and tally statuses.
+```python
+projects = session.query(Project).all()   # pulls ALL rows over the network
+active = len([p for p in projects if p.status == 'active'])
+```
+This drags every row out of the database just to count them — slow and wasteful as data grows.
+
+**The right way** — let the database count, using `GROUP BY`:
+```python
+select(Project.status, func.count()).group_by(Project.status)
+# → [('active', 1), ('planning', 1), ('on_hold', 1)]
+```
+The database returns just a handful of rows (one per status). We wrote one helper, `_count_by_status()`, and reused it for both projects and engineers. **Push work down to the database** — it's built for counting and filtering.
+
+### 28. "Real data, no dummy data" — why it matters
+
+A tempting shortcut for a dashboard is to hardcode nice-looking numbers. We didn't: every KPI, chart bar, and table row comes from a live query. The browser test even **cross-checked** the numbers on screen against the API response to prove they match. A dashboard that shows fake numbers is worse than no dashboard — people make decisions on it.
+
+### 29. Fetching several things at once (`Promise.all`)
+
+The dashboard needs four separate API calls. Instead of awaiting them one after another (slow), we fire all four **in parallel** and wait for the whole set:
+```ts
+Promise.all([getSummary(), getProjectStatus(), getRecentProjects(), getRecentEngineers()])
+```
+If any one fails, the whole thing goes to the error state — one loading spinner, one error message, consistent behavior.
+
+### 30. Building a chart without a charting library
+
+We were asked for a project-status chart but the project avoids unnecessary dependencies. A **horizontal bar chart is just `<div>`s**: each bar's width is `count / max * 100%`. No library needed. Each bar has a visible category label and its number printed at the end, so you can read the exact values — not just eyeball bar lengths.
+
+### 31. Choosing chart colors on purpose (accessibility)
+
+Colors weren't picked by taste. The status colors were run through a **palette validator** that checks they stay distinguishable for colorblind viewers and have enough contrast against the background. Just as important: every bar is **labeled with text**, so the chart never relies on color alone to convey meaning — a core accessibility rule. Color reinforces; the label informs.
+
+### 32. Reuse paid off
+
+The Recent Projects and Recent Engineers tables didn't need new status pills — they reuse the exact `ProjectStatusBadge` and `StatusBadge` components built in earlier modules. Because those were built as small, self-contained pieces, the dashboard assembled quickly from parts that already existed. This is the payoff of consistent component structure across modules.
+
+---
+
 ## 🔧 Current Project Setup (What We Have Now)
 
 ### Backend Structure

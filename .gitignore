@@ -32,5 +32,11 @@ htmlcov/
 dist/
 build/
 
+# Node / frontend
+node_modules/
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
 # IDE
 .idea/

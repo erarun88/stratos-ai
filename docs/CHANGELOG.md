@@ -10,6 +10,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - Development
 
 ### Added
+- **Executive Dashboard module** (full-stack):
+  - Backend:
+    - `DashboardSummary` and `ProjectStatusCount` Pydantic schemas
+    - `GET /dashboard/summary` — 9 headline metrics (project counts by status, engineer active/inactive totals) via single-query SQLAlchemy `GROUP BY` aggregations
+    - `GET /dashboard/project-status` — project counts per status (all five statuses, stable order, zeros included) for the chart
+    - `GET /dashboard/recent-projects` — 5 most recently created projects (`created_at` desc)
+    - `GET /dashboard/recent-engineers` — 5 most recently added engineers (`id` desc, since engineers have no timestamp)
+    - All values computed live from the database — no hardcoded/cached data; typed `response_model`s keep Swagger accurate
+  - Frontend:
+    - `pages/Dashboard.tsx` — Executive Dashboard: KPI cards, project-status chart, Recent Projects/Engineers tables, with loading/empty/error states; fetches all widgets in parallel
+    - Reusable `components/dashboard/KpiCard.tsx` and `ProjectStatusChart.tsx` (dependency-free horizontal bar chart using a colorblind-validated status palette with direct labels)
+    - Recent tables reuse the existing `ProjectStatusBadge` and engineer `StatusBadge`
+    - `api/dashboard.ts` and `types/dashboard.ts` added
+- **Project Management module** (full-stack, mirroring the Engineer module):
+  - Backend:
+    - Extended `Project` model with `project_manager`, `start_date`, `end_date`, `description`, `created_at`, `updated_at`; `budget` retained but made nullable/optional
+    - Pydantic schemas `ProjectCreate`, `ProjectUpdate`, `ProjectStatusUpdate`, `ProjectResponse` and a `ProjectStatus` enum (`planning`, `active`, `on_hold`, `completed`, `cancelled`), with non-blank validation and an `end_date >= start_date` check
+    - `GET /projects/{id}`, `POST /projects`, `PUT /projects/{id}`, `PATCH /projects/{id}/status`; `GET /projects` upgraded to a typed `response_model`
+    - Proper error handling (404 not found, 422 validation) and accurate Swagger docs via `response_model`
+    - `app/migrate.py` — idempotent migration that adds the new project columns to the existing Supabase table and normalizes legacy status values (`in_progress` → `active`); `seed.py` updated with the richer project data
+  - Frontend:
+    - `pages/Projects.tsx` — full CRUD page: professional table, loading/empty/error states, wired to the backend
+    - Reusable `components/ui/Modal.tsx`; `ProjectFormModal` (Add/Edit), `ChangeStatusModal`, and `ProjectStatusBadge`
+    - `api/client.ts` extended with `apiPost`/`apiPut`/`apiPatch` and FastAPI error-detail parsing; `api/projects.ts` and `types/project.ts` added
+  - Projects, like engineers, are never hard-deleted — status change is the retirement path
+- **React frontend foundation** (`frontend/`):
+  - Vite + React 19 + TypeScript project scaffold
+  - Tailwind CSS v4 styling (via `@tailwindcss/vite`)
+  - React Router navigation with a responsive sidebar (collapses to a hamburger menu on mobile)
+  - Dashboard page (placeholder — no widgets yet)
+  - Projects page (placeholder)
+  - Engineers page: professional, responsive table populated live from `GET /engineers`, with loading/error/empty states and color-coded status badges (Active / Inactive / On Leave)
+  - "Add Engineer" button plus per-row "Edit" and "Change Status" buttons (UI only — show a "not implemented yet" notice; not wired to the API)
+  - `api/client.ts` fetch wrapper with configurable `VITE_API_BASE_URL` (defaults to `http://localhost:8000`)
+  - `frontend/.env.example` and frontend startup instructions in the root `README.md`
 - Complete Engineer Management module:
   - `GET /engineers/{id}` - Retrieve a single engineer (404 if not found)
   - `POST /engineers` - Create an engineer, validating project existence, email uniqueness, and required fields
@@ -43,9 +78,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CORS allows all origins (not production-ready)
 - No authentication/authorization
 - Limited error handling
-- No input validation for Projects (Engineers now validated via Pydantic schemas)
 - No logging infrastructure
 - Database queries not optimized with indexes
+- Engineers page is still read-only: its Add/Edit/Change-Status buttons are UI placeholders not yet wired to the API (Projects page is fully wired)
+- Dashboard does not auto-refresh (data loads on page visit)
 
 ---
 
@@ -199,8 +235,8 @@ curl http://localhost:8000/
 ## Roadmap
 
 ### Phase 2: Core Features (Q4 2026)
-- [ ] CRUD operations for projects and engineers
-- [ ] Input validation (Pydantic models)
+- [x] CRUD operations for projects (engineers: create/update/status done on the backend; frontend wiring pending)
+- [x] Input validation (Pydantic models)
 - [ ] Comprehensive error handling
 - [ ] Service layer implementation
 - [ ] Query optimization and indexing
@@ -218,7 +254,8 @@ curl http://localhost:8000/
 - [ ] Vector search capabilities
 
 ### Phase 4: Enterprise Features (Q2 2027+)
-- [ ] Frontend application (React)
+- [x] Frontend application (React) — foundation complete (sidebar nav, Engineers table wired to API, placeholder Dashboard/Projects)
+- [ ] Frontend CRUD (wire Add/Edit/Change-Status to the API)
 - [ ] Advanced authentication (OAuth 2.0)
 - [ ] Role-based access control (RBAC)
 - [ ] Multi-tenant support

@@ -3,11 +3,24 @@ from typing import List
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
-from sqlalchemy import text, select
+from sqlalchemy import text, select, func
 from sqlalchemy.orm import Session
 from app.models.project import Project
 from app.models.engineer import Engineer
-from app.schemas import EngineerCreate, EngineerUpdate, EngineerStatusUpdate, EngineerResponse
+from app.schemas import (
+    EngineerCreate,
+    EngineerUpdate,
+    EngineerStatusUpdate,
+    EngineerResponse,
+    ProjectCreate,
+    ProjectUpdate,
+    ProjectStatusUpdate,
+    ProjectResponse,
+    ProjectStatus,
+    EngineerStatus,
+    DashboardSummary,
+    ProjectStatusCount,
+)
 
 app = FastAPI(
     title="StratOS AI",
@@ -27,21 +40,72 @@ app.add_middleware(
 def home():
     return {"message": "Welcome to StratOS AI"}
 
-@app.get("/projects")
+@app.get("/projects", response_model=List[ProjectResponse])
 def get_projects():
     with Session(engine) as session:
-        statement = select(Project)
+        statement = select(Project).order_by(Project.id)
         projects = session.execute(statement).scalars().all()
-        return [
-            {
-                "id": p.id,
-                "name": p.name,
-                "customer": p.customer,
-                "status": p.status,
-                "budget": float(p.budget)
-            }
-            for p in projects
-        ]
+        return projects
+
+
+@app.get("/projects/{project_id}", response_model=ProjectResponse)
+def get_project(project_id: int):
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Project with id {project_id} not found")
+        return project
+
+
+@app.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+def create_project(project_in: ProjectCreate):
+    with Session(engine) as session:
+        project = Project(
+            name=project_in.name,
+            customer=project_in.customer,
+            project_manager=project_in.project_manager,
+            status=project_in.status.value,
+            start_date=project_in.start_date,
+            end_date=project_in.end_date,
+            description=project_in.description,
+        )
+        session.add(project)
+        session.commit()
+        session.refresh(project)
+        return project
+
+
+@app.put("/projects/{project_id}", response_model=ProjectResponse)
+def update_project(project_id: int, project_in: ProjectUpdate):
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Project with id {project_id} not found")
+
+        project.name = project_in.name
+        project.customer = project_in.customer
+        project.project_manager = project_in.project_manager
+        project.status = project_in.status.value
+        project.start_date = project_in.start_date
+        project.end_date = project_in.end_date
+        project.description = project_in.description
+
+        session.commit()
+        session.refresh(project)
+        return project
+
+
+@app.patch("/projects/{project_id}/status", response_model=ProjectResponse)
+def update_project_status(project_id: int, status_in: ProjectStatusUpdate):
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail=f"Project with id {project_id} not found")
+
+        project.status = status_in.status.value
+        session.commit()
+        session.refresh(project)
+        return project
 @app.get("/engineers", response_model=List[EngineerResponse])
 def get_engineers():
     with Session(engine) as session:
@@ -131,6 +195,80 @@ def get_project_engineers(project_id: int):
         statement = select(Engineer).where(Engineer.project_id == project_id)
         engineers = session.execute(statement).scalars().all()
         return engineers
+
+
+# ---------------------------------------------------------------------------
+# Dashboard (Executive) endpoints
+# ---------------------------------------------------------------------------
+
+# Human-readable labels for project statuses, used by the status chart.
+PROJECT_STATUS_LABELS = {
+    ProjectStatus.planning: "Planning",
+    ProjectStatus.active: "Active",
+    ProjectStatus.on_hold: "On Hold",
+    ProjectStatus.completed: "Completed",
+    ProjectStatus.cancelled: "Cancelled",
+}
+
+
+def _count_by_status(session: Session, model) -> dict:
+    """Return {status_value: count} for a model, computed in a single query."""
+    rows = session.execute(
+        select(model.status, func.count()).group_by(model.status)
+    ).all()
+    return {status_value: count for status_value, count in rows}
+
+
+@app.get("/dashboard/summary", response_model=DashboardSummary)
+def get_dashboard_summary():
+    with Session(engine) as session:
+        project_counts = _count_by_status(session, Project)
+        engineer_counts = _count_by_status(session, Engineer)
+
+        return DashboardSummary(
+            total_projects=sum(project_counts.values()),
+            active_projects=project_counts.get(ProjectStatus.active.value, 0),
+            planning_projects=project_counts.get(ProjectStatus.planning.value, 0),
+            on_hold_projects=project_counts.get(ProjectStatus.on_hold.value, 0),
+            completed_projects=project_counts.get(ProjectStatus.completed.value, 0),
+            cancelled_projects=project_counts.get(ProjectStatus.cancelled.value, 0),
+            total_engineers=sum(engineer_counts.values()),
+            active_engineers=engineer_counts.get(EngineerStatus.active.value, 0),
+            inactive_engineers=engineer_counts.get(EngineerStatus.inactive.value, 0),
+        )
+
+
+@app.get("/dashboard/project-status", response_model=List[ProjectStatusCount])
+def get_dashboard_project_status():
+    with Session(engine) as session:
+        counts = _count_by_status(session, Project)
+        # Return every status in a stable order, including zero counts, so the
+        # chart always renders the full set of categories.
+        return [
+            ProjectStatusCount(
+                status=status_enum.value,
+                label=PROJECT_STATUS_LABELS[status_enum],
+                count=counts.get(status_enum.value, 0),
+            )
+            for status_enum in ProjectStatus
+        ]
+
+
+@app.get("/dashboard/recent-projects", response_model=List[ProjectResponse])
+def get_dashboard_recent_projects():
+    with Session(engine) as session:
+        statement = select(Project).order_by(Project.created_at.desc(), Project.id.desc()).limit(5)
+        return session.execute(statement).scalars().all()
+
+
+@app.get("/dashboard/recent-engineers", response_model=List[EngineerResponse])
+def get_dashboard_recent_engineers():
+    with Session(engine) as session:
+        # Engineers have no created_at column, so id descending is used as the
+        # best available proxy for most-recently-added.
+        statement = select(Engineer).order_by(Engineer.id.desc()).limit(5)
+        return session.execute(statement).scalars().all()
+
 
 @app.get("/db-test")
 def db_test():

@@ -163,13 +163,29 @@ curl http://localhost:8000/
 
 ### Projects Endpoints
 
+A project has the following fields. `status` is one of `planning`, `active`,
+`on_hold`, `completed`, `cancelled`. `budget` is a legacy/optional field retained
+from the original schema — it is included in responses but is **not** accepted or
+required by the create/update endpoints.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | integer | Auto-assigned |
+| `name` | string | Required, non-blank |
+| `customer` | string | Required, non-blank |
+| `project_manager` | string | Required, non-blank |
+| `status` | string enum | `planning` / `active` / `on_hold` / `completed` / `cancelled` |
+| `start_date` | date (`YYYY-MM-DD`) | Optional |
+| `end_date` | date (`YYYY-MM-DD`) | Optional; must be ≥ `start_date` when both are set |
+| `description` | string | Optional |
+| `created_at` | datetime | Auto-set on creation |
+| `updated_at` | datetime | Auto-updated on modification |
+
 #### GET /projects
 
-**Description**: Retrieve all projects
+**Description**: Retrieve all projects (ordered by `id`)
 
 **Authentication**: None (planned: Required)
-
-**Parameters**: None
 
 **Request**:
 ```bash
@@ -183,192 +199,146 @@ curl http://localhost:8000/projects
     "id": 1,
     "name": "CloudSync Platform",
     "customer": "TechCorp Inc.",
+    "project_manager": "Sarah Mitchell",
     "status": "active",
-    "budget": 500000.0
-  },
-  {
-    "id": 2,
-    "name": "DataVault Analytics",
-    "customer": "FinanceFlow Ltd.",
-    "status": "active",
-    "budget": 750000.0
-  },
-  {
-    "id": 3,
-    "name": "SecureNet Infrastructure",
-    "customer": "GlobalSecurity Corp.",
-    "status": "in_progress",
-    "budget": 1200000.0
+    "start_date": "2026-01-15",
+    "end_date": "2026-12-15",
+    "description": "Enterprise file synchronization and collaboration platform.",
+    "created_at": "2026-07-24T21:03:15.247614Z",
+    "updated_at": "2026-07-24T21:03:15.247614Z"
   }
 ]
 ```
 
-**Query Parameters** (Future):
-```
-GET /projects?status=active&skip=0&limit=10&sort_by=name
-```
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `status` | string | No | Filter by status (active, in_progress, completed) |
-| `customer` | string | No | Filter by customer name |
-| `skip` | integer | No | Number of records to skip (pagination) |
-| `limit` | integer | No | Maximum records to return (default: 10) |
-| `sort_by` | string | No | Field to sort by (name, status, budget) |
-
 **Status Codes**:
 - `200`: Success
-- `401`: Unauthorized (when auth is implemented)
 - `500`: Server error
-
----
-
-#### POST /projects
-
-**Status**: 🔄 Planned (Not implemented)
-
-**Description**: Create a new project
-
-**Authentication**: Required (planned)
-
-**Request Body**:
-```json
-{
-  "name": "New Project Name",
-  "customer": "Customer Name",
-  "status": "active",
-  "budget": 500000.00
-}
-```
-
-**Response** (201 Created):
-```json
-{
-  "id": 4,
-  "name": "New Project Name",
-  "customer": "Customer Name",
-  "status": "active",
-  "budget": 500000.0
-}
-```
-
-**Request Example**:
-```bash
-curl -X POST http://localhost:8000/projects \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "AI Research",
-    "customer": "TechCorp Inc.",
-    "status": "active",
-    "budget": 300000
-  }'
-```
 
 ---
 
 #### GET /projects/{id}
 
-**Status**: 🔄 Planned (Not implemented)
-
-**Description**: Retrieve specific project by ID
-
-**Authentication**: Required (planned)
-
-**Path Parameters**:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | Yes | Project ID |
+**Description**: Retrieve a specific project by ID
 
 **Request**:
 ```bash
 curl http://localhost:8000/projects/1
 ```
 
-**Response** (200 OK):
-```json
-{
-  "id": 1,
-  "name": "CloudSync Platform",
-  "customer": "TechCorp Inc.",
-  "status": "active",
-  "budget": 500000.0
-}
-```
+**Response** (200 OK): a single project object (same shape as above).
 
 **Status Codes**:
 - `200`: Success
 - `404`: Project not found
-- `401`: Unauthorized
+
+---
+
+#### POST /projects
+
+**Description**: Create a new project
+
+**Validation**:
+- `name`, `customer`, `project_manager` required and non-blank
+- `status` must be a valid enum value (defaults to `planning` if omitted)
+- `end_date` must not be earlier than `start_date` when both are provided
+
+**Request Body**:
+```json
+{
+  "name": "AI Insights Engine",
+  "customer": "Innovate Labs",
+  "project_manager": "Marcus Reid",
+  "status": "planning",
+  "start_date": "2026-08-01",
+  "end_date": "2027-01-31",
+  "description": "LLM-powered analytics assistant."
+}
+```
+
+**Response** (201 Created): the created project, including `id`, `created_at`, `updated_at`.
+
+**Request Example**:
+```bash
+curl -X POST http://localhost:8000/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "AI Insights Engine",
+    "customer": "Innovate Labs",
+    "project_manager": "Marcus Reid",
+    "status": "planning"
+  }'
+```
+
+**Status Codes**:
+- `201`: Created
+- `422`: Validation error (blank required field, invalid status, `end_date` before `start_date`)
 
 ---
 
 #### PUT /projects/{id}
 
-**Status**: 🔄 Planned (Not implemented)
+**Description**: Full update of a project (all fields replaced)
 
-**Description**: Update entire project
-
-**Authentication**: Required (planned)
-
-**Path Parameters**:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | Yes | Project ID |
+**Validation**: same as `POST /projects`; project must exist.
 
 **Request Body**:
 ```json
 {
-  "name": "Updated Project Name",
-  "customer": "Updated Customer",
-  "status": "in_progress",
-  "budget": 600000.00
+  "name": "AI Insights Engine v2",
+  "customer": "Innovate Labs",
+  "project_manager": "Marcus Reid",
+  "status": "active",
+  "start_date": "2026-08-01",
+  "end_date": "2027-03-31",
+  "description": "Expanded scope."
 }
 ```
 
-**Response** (200 OK):
+**Response** (200 OK): the updated project (`updated_at` is bumped).
+
+**Status Codes**:
+- `200`: Success
+- `404`: Project not found
+- `422`: Validation error
+
+---
+
+#### PATCH /projects/{id}/status
+
+**Description**: Change only a project's status.
+
+**Request Body**:
 ```json
 {
-  "id": 1,
-  "name": "Updated Project Name",
-  "customer": "Updated Customer",
-  "status": "in_progress",
-  "budget": 600000.0
+  "status": "on_hold"
 }
 ```
+
+Allowed values: `planning`, `active`, `on_hold`, `completed`, `cancelled`
+
+**Response** (200 OK): the updated project.
+
+**Request Example**:
+```bash
+curl -X PATCH http://localhost:8000/projects/1/status \
+  -H "Content-Type: application/json" \
+  -d '{"status": "on_hold"}'
+```
+
+**Status Codes**:
+- `200`: Success
+- `404`: Project not found
+- `422`: Invalid status value
 
 ---
 
 #### DELETE /projects/{id}
 
-**Status**: 🔄 Planned (Not implemented)
+**Status**: ❌ Not implemented (by design)
 
-**Description**: Delete a project
-
-**Authentication**: Required (planned)
-
-**Path Parameters**:
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | integer | Yes | Project ID |
-
-**Request**:
-```bash
-curl -X DELETE http://localhost:8000/projects/1
-```
-
-**Response** (204 No Content):
-```
-(empty body)
-```
-
-**Status Codes**:
-- `204`: Successfully deleted
-- `404`: Project not found
-- `401`: Unauthorized
-- `403`: Insufficient permissions
+Consistent with engineers, projects are not hard-deleted. Use
+`PATCH /projects/{id}/status` to mark a project `cancelled` or `completed`,
+preserving historical portfolio data.
 
 ---
 
@@ -660,6 +630,75 @@ curl http://localhost:8000/projects/1/engineers
 
 ---
 
+### Dashboard Endpoints
+
+Executive dashboard aggregations computed live from the database (no cached or
+hardcoded values). All are read-only and require no path/query parameters.
+
+#### GET /dashboard/summary
+
+**Description**: Portfolio and team headline counts.
+
+**Request**:
+```bash
+curl http://localhost:8000/dashboard/summary
+```
+
+**Response** (200 OK):
+```json
+{
+  "total_projects": 3,
+  "active_projects": 1,
+  "planning_projects": 1,
+  "on_hold_projects": 1,
+  "completed_projects": 0,
+  "cancelled_projects": 0,
+  "total_engineers": 20,
+  "active_engineers": 17,
+  "inactive_engineers": 1
+}
+```
+
+---
+
+#### GET /dashboard/project-status
+
+**Description**: Project counts grouped by status, for the status chart. Always
+returns all five statuses in a stable order, including zero counts.
+
+**Response** (200 OK):
+```json
+[
+  { "status": "planning",  "label": "Planning",  "count": 1 },
+  { "status": "active",    "label": "Active",    "count": 1 },
+  { "status": "on_hold",   "label": "On Hold",   "count": 1 },
+  { "status": "completed", "label": "Completed", "count": 0 },
+  { "status": "cancelled", "label": "Cancelled", "count": 0 }
+]
+```
+
+---
+
+#### GET /dashboard/recent-projects
+
+**Description**: The 5 most recently created projects (ordered by `created_at`
+descending, then `id`). Returns full project objects (same shape as
+`GET /projects`).
+
+---
+
+#### GET /dashboard/recent-engineers
+
+**Description**: The 5 most recently added engineers. Because the engineers table
+has no timestamp column, `id` descending is used as the proxy for recency. Returns
+full engineer objects (same shape as `GET /engineers`).
+
+**Status Codes** (all dashboard endpoints):
+- `200`: Success
+- `500`: Server error
+
+---
+
 ### Analytics Endpoints (Future)
 
 #### GET /analytics/portfolio
@@ -762,10 +801,13 @@ X-RateLimit-Reset: 1629792000        (future)
 **Project Create**:
 ```json
 {
-  "name": "string (required, 1-255 chars)",
-  "customer": "string (required)",
-  "status": "string (required: active|in_progress|on_hold|completed)",
-  "budget": "number (required, > 0)"
+  "name": "string (required, non-blank)",
+  "customer": "string (required, non-blank)",
+  "project_manager": "string (required, non-blank)",
+  "status": "string (planning|active|on_hold|completed|cancelled; default planning)",
+  "start_date": "date YYYY-MM-DD (optional)",
+  "end_date": "date YYYY-MM-DD (optional, >= start_date)",
+  "description": "string (optional)"
 }
 ```
 
@@ -999,8 +1041,15 @@ See [CHANGELOG.md](CHANGELOG.md) for version history and breaking changes.
 - ✅ GET /projects/{project_id}/engineers - Implemented
 - ✅ GET / - Implemented
 - ✅ GET /db-test - Implemented
-- 🔄 POST /projects - Planned
-- 🔄 PUT/DELETE /projects/{id} - Planned
+- ✅ GET /projects/{id} - Implemented
+- ✅ POST /projects - Implemented
+- ✅ PUT /projects/{id} - Implemented
+- ✅ PATCH /projects/{id}/status - Implemented
+- ❌ DELETE /projects/{id} - Not planned (soft status management instead)
+- ✅ GET /dashboard/summary - Implemented
+- ✅ GET /dashboard/project-status - Implemented
+- ✅ GET /dashboard/recent-projects - Implemented
+- ✅ GET /dashboard/recent-engineers - Implemented
 - 📋 Analytics endpoints - Planned
 - 📋 WebSocket real-time updates - Planned
 - 📋 GraphQL API - Planned

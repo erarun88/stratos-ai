@@ -57,8 +57,14 @@ erDiagram
         int id PK
         string name
         string customer
+        string project_manager
         string status
+        date start_date
+        date end_date
+        text description
         numeric budget
+        timestamp created_at
+        timestamp updated_at
     }
     
     ENGINEERS {
@@ -84,27 +90,46 @@ CREATE TABLE projects (
     id SERIAL PRIMARY KEY,
     name VARCHAR NOT NULL,
     customer VARCHAR NOT NULL,
+    project_manager VARCHAR,
     status VARCHAR NOT NULL,
-    budget NUMERIC NOT NULL
+    start_date DATE,
+    end_date DATE,
+    description TEXT,
+    budget NUMERIC,                          -- legacy/optional (nullable)
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
 );
 ```
+
+> The Project Management module (2026-07-24) added `project_manager`, `start_date`,
+> `end_date`, `description`, `created_at`, and `updated_at`, and relaxed `budget`
+> to be nullable (it is no longer collected by the API). These additive changes
+> were applied to the live Supabase table by the idempotent script
+> `backend/app/migrate.py` (run via `python -m app.migrate`), since
+> `create_all()` does not ALTER existing tables and the project has no Alembic yet.
 
 **Columns**:
 
 | Column | Type | Nullable | Constraints | Description |
 |--------|------|----------|-------------|-------------|
 | `id` | INTEGER | No | PRIMARY KEY | Unique project identifier (auto-increment) |
-| `name` | VARCHAR | No | UNIQUE (planned) | Project name / title |
+| `name` | VARCHAR | No | None | Project name / title |
 | `customer` | VARCHAR | No | None | Customer or client organization |
-| `status` | VARCHAR | No | ENUM (planned) | Project status: active, in_progress, on_hold, completed |
-| `budget` | NUMERIC | No | CHECK > 0 (planned) | Project budget in currency units |
+| `project_manager` | VARCHAR | Yes | None | Name of the responsible project manager |
+| `status` | VARCHAR | No | app-level enum | Project status: `planning`, `active`, `on_hold`, `completed`, `cancelled` |
+| `start_date` | DATE | Yes | None | Planned/actual project start date |
+| `end_date` | DATE | Yes | `>= start_date` (app-level) | Planned/actual project end date |
+| `description` | TEXT | Yes | None | Free-text project description |
+| `budget` | NUMERIC | Yes | None | Legacy/optional budget in currency units (not collected by the API) |
+| `created_at` | TIMESTAMPTZ | No | DEFAULT `now()` | Row creation timestamp |
+| `updated_at` | TIMESTAMPTZ | No | DEFAULT `now()`, bumped on update | Last modification timestamp |
 
 **Sample Data**:
 ```sql
-INSERT INTO projects VALUES 
-  (1, 'CloudSync Platform', 'TechCorp Inc.', 'active', 500000.00),
-  (2, 'DataVault Analytics', 'FinanceFlow Ltd.', 'active', 750000.00),
-  (3, 'SecureNet Infrastructure', 'GlobalSecurity Corp.', 'in_progress', 1200000.00);
+INSERT INTO projects (id, name, customer, project_manager, status, start_date, end_date, description, budget) VALUES
+  (1, 'CloudSync Platform', 'TechCorp Inc.', 'Sarah Mitchell', 'active', '2026-01-15', '2026-12-15', 'Enterprise file synchronization and collaboration platform.', 500000.00),
+  (2, 'DataVault Analytics', 'FinanceFlow Ltd.', 'Daniel Okafor', 'active', '2026-03-01', '2027-02-28', 'Real-time financial analytics and reporting suite.', 750000.00),
+  (3, 'SecureNet Infrastructure', 'GlobalSecurity Corp.', 'Priya Nair', 'planning', '2026-06-01', NULL, 'Zero-trust network infrastructure rollout.', 1200000.00);
 ```
 
 **Indexes (Planned)**:
@@ -408,7 +433,7 @@ ALTER TABLE assignments ADD CONSTRAINT chk_allocation_range
 
 -- Ensure valid status values
 ALTER TABLE projects ADD CONSTRAINT chk_valid_status 
-  CHECK (status IN ('active', 'in_progress', 'on_hold', 'completed'));
+  CHECK (status IN ('planning', 'active', 'on_hold', 'completed', 'cancelled'));
 ```
 
 ---
@@ -615,7 +640,8 @@ shared_preload_libraries: 'pg_stat_statements'  # Query statistics
 ## Migration Strategy
 
 ### Current Approach
-- Manual schema creation via SQLAlchemy `create_all()`
+- Manual schema creation via SQLAlchemy `create_all()` (creates missing tables only)
+- Idempotent, hand-written migration scripts for altering existing tables — e.g. `backend/app/migrate.py`, which adds the Project Management columns via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` and can be re-run safely
 - Seed data script for initial data load
 
 ### Recommended Migration Framework (Planned)

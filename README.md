@@ -91,3 +91,51 @@ curl http://localhost:8000/engineers
 ```
 
 Interactive API documentation is available at `http://localhost:8000/docs`.
+
+---
+
+## Getting Started (Frontend)
+
+The React frontend lives in the [`frontend/`](frontend/) directory and talks to the FastAPI backend above.
+
+### Prerequisites
+
+- Node.js 20+ and npm
+- The backend running at `http://localhost:8000` (see the steps above) with a seeded database
+
+### 1. Install dependencies
+
+```bash
+cd frontend
+npm install
+```
+
+### 2. Configure the backend URL (optional)
+
+The frontend defaults to `http://localhost:8000`. To point it elsewhere, copy the example env file and edit it:
+
+```bash
+cp .env.example .env
+# then set VITE_API_BASE_URL in .env
+```
+
+### 3. Start the development server
+
+```bash
+npm run dev
+```
+
+The app will be available at `http://localhost:5173`. Open it in your browser:
+
+- **Dashboard** — placeholder for future portfolio widgets
+- **Engineers** — live table of engineers fetched from `GET /engineers`
+- **Projects** — placeholder for future project management
+
+> The backend must be running and seeded for the Engineers page to load data. If you see a connection error on the Engineers page, confirm the API is up at `http://localhost:8000/engineers`.
+
+### 4. Build for production (optional)
+
+```bash
+npm run build      # type-check + bundle into frontend/dist
+npm run preview    # preview the production build locally
+```

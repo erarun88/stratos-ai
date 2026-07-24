@@ -7,7 +7,7 @@
 ### Current Status
 - 🚧 **Phase**: Early Development (Version 1.0.0)
 - 📅 **Start Date**: July 2026
-- 🎯 **Current Focus**: Backend MVP with core data models and API foundations
+- 🎯 **Current Focus**: React frontend foundation on top of the backend MVP (data models + API)
 
 ---
 
@@ -85,9 +85,29 @@ StratOS AI addresses these challenges through:
 
 ## Feature Inventory
 
+### Frontend
+- ✅ React + TypeScript foundation (Vite, React Router, Tailwind CSS) in [`frontend/`](../frontend/)
+- ✅ Navigation sidebar with responsive (mobile hamburger) layout
+- ✅ Executive Dashboard page — live KPI cards, project-status bar chart, and Recent Projects/Engineers tables, all from real data
+- ✅ Engineers page — live table populated from `GET /engineers` with status badges
+- ✅ "Add Engineer", "Edit", and "Change Status" buttons on Engineers (UI only, not yet wired to the API)
+- ✅ Projects page — full CRUD: table, Add/Edit modals, Change Status, loading/empty/error states, all wired to the backend
+
+### Executive Dashboard
+- ✅ `GET /dashboard/summary` — Portfolio + team headline counts (9 metrics)
+- ✅ `GET /dashboard/project-status` — Project counts by status (drives the chart)
+- ✅ `GET /dashboard/recent-projects` — 5 most recently created projects
+- ✅ `GET /dashboard/recent-engineers` — 5 most recently added engineers
+- All values are aggregated live from the database via SQLAlchemy — no hardcoded data
+
 ### Project Management
 - ✅ `GET /projects` — List all projects
-- 🔄 Full CRUD (`POST`/`GET /{id}`/`PUT`/`DELETE`) — Planned
+- ✅ `GET /projects/{id}` — Get a single project (404 if not found)
+- ✅ `POST /projects` — Create a project (validates required fields, status enum, date order)
+- ✅ `PUT /projects/{id}` — Full update of a project (same validations)
+- ✅ `PATCH /projects/{id}/status` — Change status (`planning` / `active` / `on_hold` / `completed` / `cancelled`)
+- ❌ Hard delete — Intentionally not implemented; projects are retired via status change to preserve portfolio history.
+- Fields: `id`, `name`, `customer`, `project_manager`, `status`, `start_date`, `end_date`, `description`, `created_at`, `updated_at` (plus legacy optional `budget`)
 
 ### Engineer Management
 - ✅ `GET /engineers` — List all engineers
@@ -140,7 +160,8 @@ StratOS AI addresses these challenges through:
 ## Constraints & Limitations
 
 ### Current Limitations
-- Frontend not yet implemented
+- Engineers page is still read-only: its create/edit/status-change buttons are UI placeholders, not yet wired to the API (Projects page is fully wired)
+- Dashboard is read-only and not auto-refreshing (reloads on page visit)
 - No authentication/authorization system
 - No workflow automation engine
 - Limited to PostgreSQL database (no NoSQL support currently)
@@ -187,7 +208,10 @@ StratOS AI addresses these challenges through:
 | Milestone | Target Date | Status | Description |
 |-----------|------------|--------|-------------|
 | MVP Database & API | 2026-07-31 | ✅ Complete | Core models, API endpoints, seed data |
-| Basic Frontend | 2026-09-15 | 🔄 Planned | React dashboard with project listing |
+| Frontend Foundation | 2026-07-24 | ✅ Complete | React app: sidebar nav, Engineers table wired to `GET /engineers`, placeholder pages |
+| Project Management Module | 2026-07-24 | ✅ Complete | Full Project CRUD API + frontend page (table, Add/Edit modals, Change Status) |
+| Executive Dashboard Module | 2026-07-24 | ✅ Complete | Dashboard aggregation APIs + frontend (KPIs, status chart, recent tables) |
+| Engineers CRUD wiring | 2026-09-15 | 🔄 Planned | Wire Engineers Add/Edit/Change-Status to the API |
 | AI Integration | 2026-11-30 | 📋 Planned | OpenAI integration for analytics |
 | RAG Implementation | 2027-01-31 | 📋 Planned | Retrieval-augmented generation for search |
 | Enterprise Launch | 2027-03-31 | 📋 Planned | Full production-ready release |

@@ -66,12 +66,13 @@ graph TB
 | **psycopg2** | PostgreSQL database adapter |
 | **uvicorn** | ASGI server for FastAPI |
 
-### Frontend Stack (Planned)
-- **React**: UI framework
-- **TypeScript**: Type-safe JavaScript
-- **Redux/Zustand**: State management
-- **TailwindCSS**: Styling
-- **Vite**: Build tool
+### Frontend Stack
+- **React 19**: UI framework — ✅ Implemented
+- **TypeScript**: Type-safe JavaScript — ✅ Implemented
+- **Vite**: Build tool / dev server — ✅ Implemented
+- **React Router**: Client-side page navigation — ✅ Implemented
+- **Tailwind CSS v4**: Styling (via `@tailwindcss/vite`) — ✅ Implemented
+- **State management (Redux/Zustand)**: Not yet needed — local component state + `fetch` for now
 
 ### Infrastructure
 - **Supabase**: PostgreSQL hosting + pgvector + Auth (planned)
@@ -137,16 +138,24 @@ graph TB
 ```
 GET    /                              → Home message
 GET    /projects                      → Retrieve all projects
+GET    /projects/{id}                 → Get project details
+POST   /projects                      → Create new project
+PUT    /projects/{id}                 → Update project (full replacement)
+PATCH  /projects/{id}/status          → Change project status (soft lifecycle)
 GET    /engineers                     → Retrieve all engineers
 GET    /engineers/{id}                → Get engineer details
 POST   /engineers                     → Create new engineer
 PUT    /engineers/{id}                → Update engineer (full replacement)
 PATCH  /engineers/{id}/status         → Change engineer status (soft delete alternative)
 GET    /projects/{project_id}/engineers → Engineers assigned to a project
+GET    /dashboard/summary             → Portfolio + team headline counts
+GET    /dashboard/project-status      → Project counts grouped by status (chart)
+GET    /dashboard/recent-projects     → 5 most recently created projects
+GET    /dashboard/recent-engineers    → 5 most recently added engineers
 GET    /db-test                       → Database connectivity test
 ```
 
-Engineers are never hard-deleted — `PATCH /engineers/{id}/status` is the only supported way to retire an engineer, preserving historical staffing data.
+Neither engineers nor projects are hard-deleted — the `PATCH .../status` endpoints are the supported way to retire a record, preserving historical staffing and portfolio data.
 
 #### Future Endpoints
 
@@ -441,14 +450,48 @@ sequenceDiagram
 
 ```
 backend/app/
-├── main.py              # FastAPI application and routes
+├── main.py              # FastAPI application and routes (Projects + Engineers)
 ├── database.py          # Database connection setup
+├── migrate.py           # Idempotent schema migration (adds Project columns)
 ├── seed.py              # Sample data seeding
-├── schemas.py           # Pydantic request/response models (Engineer)
+├── schemas.py           # Pydantic request/response models (Engineer + Project)
 └── models/
     ├── __init__.py      # Shared ORM Base
     ├── project.py       # Project ORM model
     └── engineer.py      # Engineer ORM model
+
+frontend/src/
+├── main.tsx             # React entry point
+├── App.tsx              # Route definitions (React Router)
+├── index.css            # Tailwind import + base styles
+├── api/
+│   ├── client.ts        # fetch wrapper (GET/POST/PUT/PATCH) + error parsing
+│   ├── engineers.ts     # getEngineers() → GET /engineers
+│   ├── projects.ts      # Project CRUD calls → /projects endpoints
+│   └── dashboard.ts     # Dashboard aggregations → /dashboard endpoints
+├── components/
+│   ├── layout/
+│   │   ├── Layout.tsx   # App shell (sidebar + responsive header)
+│   │   └── Sidebar.tsx  # Navigation sidebar
+│   ├── ui/
+│   │   └── Modal.tsx    # Reusable modal dialog (overlay, Esc-to-close)
+│   ├── engineers/
+│   │   └── StatusBadge.tsx       # Colored engineer status pill
+│   ├── projects/
+│   │   ├── ProjectStatusBadge.tsx # Colored project status pill
+│   │   ├── ProjectFormModal.tsx   # Add / Edit project form
+│   │   └── ChangeStatusModal.tsx  # Change project status
+│   └── dashboard/
+│       ├── KpiCard.tsx           # Reusable KPI metric card
+│       └── ProjectStatusChart.tsx # Horizontal bar chart (validated palette)
+├── pages/
+│   ├── Dashboard.tsx    # Executive dashboard (KPIs, chart, recent tables)
+│   ├── Engineers.tsx    # Live engineer table
+│   └── Projects.tsx     # Full CRUD project management
+└── types/
+    ├── engineer.ts      # Engineer / EngineerStatus types
+    ├── project.ts       # Project / ProjectStatus / ProjectInput types
+    └── dashboard.ts     # DashboardSummary / ProjectStatusCount types
 
 Planned Modules:
 ├── api/                 # API route handlers

@@ -99,9 +99,21 @@ graph TB
 - Planned abstraction layer for data access
 - Enables easier testing and database switching
 
-#### 4. **Service Layer** (Planned)
+#### 4. **Service Layer** (Adopted for new modules)
 - Separate business logic from route handlers
 - Reusable business logic components
+- **Implemented** by the Document Management module: `routers/documents.py` handles
+  HTTP only, `services/document_service.py` owns the rules and imports no FastAPI,
+  so the same logic can be reused by a background worker or the AI ingestion pipeline.
+  Services raise domain exceptions (`services/exceptions.py`); routers map them to
+  status codes. Older Project/Engineer endpoints remain inline (see ADR-P02).
+
+#### 5. **Storage Abstraction (Strategy Pattern)**
+- `storage/base.py` defines a four-method blob interface; `storage/local.py` implements
+  it on the local filesystem and `get_document_storage()` picks the backend from config
+- Document rows store `storage_backend` + `storage_key`, never a filesystem path, so an
+  S3/Azure Blob backend can be added — and existing rows migrated per-object — without
+  schema, API or service changes
 
 ### Architectural Patterns
 
@@ -385,6 +397,18 @@ sequenceDiagram
 - CORS middleware (all origins allowed - development only)
 - Environment-based secrets management (.env)
 - No authentication/authorization
+- **File upload hardening** (Document Management module):
+  - Allow-list on extension *and* Content-Type, plus a magic-number check
+    (`%PDF-`) so a renamed executable cannot be stored as a "PDF"
+  - Size limit enforced while streaming, not from the client's `Content-Length`;
+    partial writes are cleaned up
+  - Client filenames are never used to build paths — storage keys are
+    server-generated UUIDs; the filename is sanitised for display/download only
+  - Local storage resolves every key and rejects anything outside the storage root
+  - Downloads are served with `X-Content-Type-Options: nosniff` and a quoted,
+    RFC 6266-encoded `Content-Disposition`
+  - Search input is escaped before use in `ILIKE` patterns; all queries are
+    parameterised through SQLAlchemy
 
 ### Planned Security Measures
 
@@ -450,15 +474,29 @@ sequenceDiagram
 
 ```
 backend/app/
-├── main.py              # FastAPI application and routes (Projects + Engineers)
-├── database.py          # Database connection setup
+├── main.py              # FastAPI application, inline routes (Projects + Engineers + Dashboard), router mounting
+├── config.py            # Environment-driven settings (storage backend, upload limits, log level)
+├── logging_config.py    # Central logging setup
+├── database.py          # Database connection + get_session() request dependency
 ├── migrate.py           # Idempotent schema migration (adds Project columns)
+├── migrate_documents.py # Idempotent schema migration (creates documents table + indexes)
+├── purge_documents.py   # Retention job: reclaims blobs of soft-deleted documents
 ├── seed.py              # Sample data seeding
-├── schemas.py           # Pydantic request/response models (Engineer + Project)
-└── models/
-    ├── __init__.py      # Shared ORM Base
-    ├── project.py       # Project ORM model
-    └── engineer.py      # Engineer ORM model
+├── schemas.py           # Pydantic request/response models (Engineer + Project + Document)
+├── models/
+│   ├── __init__.py      # Shared ORM Base
+│   ├── project.py       # Project ORM model
+│   ├── engineer.py      # Engineer ORM model
+│   └── document.py      # Document ORM model (metadata only; blob lives in storage)
+├── routers/
+│   └── documents.py     # Document HTTP surface (parsing, status codes, response models)
+├── services/
+│   ├── exceptions.py    # Domain exceptions, translated to HTTP by the routers
+│   └── document_service.py  # Upload validation, hashing, storage orchestration, queries
+└── storage/
+    ├── base.py          # DocumentStorage interface (save / open / delete / exists)
+    ├── local.py         # Local filesystem backend (atomic writes, path-traversal guard)
+    └── __init__.py      # get_document_storage() — backend selection from config
 
 frontend/src/
 ├── main.tsx             # React entry point
@@ -468,6 +506,7 @@ frontend/src/
 │   ├── client.ts        # fetch wrapper (GET/POST/PUT/PATCH) + error parsing
 │   ├── engineers.ts     # getEngineers() → GET /engineers
 │   ├── projects.ts      # Project CRUD calls → /projects endpoints
+│   ├── documents.ts     # Document upload/list/update/delete + download URL builder
 │   └── dashboard.ts     # Dashboard aggregations → /dashboard endpoints
 ├── components/
 │   ├── layout/
@@ -481,16 +520,23 @@ frontend/src/
 │   │   ├── ProjectStatusBadge.tsx # Colored project status pill
 │   │   ├── ProjectFormModal.tsx   # Add / Edit project form
 │   │   └── ChangeStatusModal.tsx  # Change project status
+│   ├── documents/
+│   │   ├── DocumentTypeBadge.tsx   # Colored document type pill
+│   │   ├── DocumentUploadModal.tsx # Upload form (file + metadata)
+│   │   ├── DocumentEditModal.tsx   # Metadata-only edit form
+│   │   └── DeleteDocumentModal.tsx # Delete confirmation
 │   └── dashboard/
 │       ├── KpiCard.tsx           # Reusable KPI metric card
 │       └── ProjectStatusChart.tsx # Horizontal bar chart (validated palette)
 ├── pages/
 │   ├── Dashboard.tsx    # Executive dashboard (KPIs, chart, recent tables)
 │   ├── Engineers.tsx    # Live engineer table
-│   └── Projects.tsx     # Full CRUD project management
+│   ├── Projects.tsx     # Full CRUD project management
+│   └── Documents.tsx    # Document repository (search, filters, pagination, upload)
 └── types/
     ├── engineer.ts      # Engineer / EngineerStatus types
     ├── project.ts       # Project / ProjectStatus / ProjectInput types
+    ├── document.ts      # Document / DocumentType / upload + filter types
     └── dashboard.ts     # DashboardSummary / ProjectStatusCount types
 
 Planned Modules:

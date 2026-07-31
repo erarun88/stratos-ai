@@ -2,7 +2,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class EngineerStatus(str, Enum):
@@ -152,3 +152,138 @@ class ProjectStatusCount(BaseModel):
     status: str
     label: str
     count: int
+
+
+# ---------------------------------------------------------------------------
+# Document Management schemas
+# ---------------------------------------------------------------------------
+
+
+class DocumentType(str, Enum):
+    """Business classification of a document.
+
+    Kept deliberately coarse: it drives filtering today and will drive
+    retrieval strategy (e.g. which documents feed contract risk analysis)
+    once AI processing is added.
+    """
+
+    contract = "contract"
+    sow = "sow"
+    proposal = "proposal"
+    report = "report"
+    specification = "specification"
+    meeting_minutes = "meeting_minutes"
+    other = "other"
+
+
+class DocumentSortField(str, Enum):
+    created_at = "created_at"
+    title = "title"
+    file_size = "file_size"
+    document_type = "document_type"
+
+
+class SortOrder(str, Enum):
+    asc = "asc"
+    desc = "desc"
+
+
+def _optional_trimmed(value: Optional[str]) -> Optional[str]:
+    """Trim an optional free-text field, collapsing blanks to None."""
+    if value is None:
+        return None
+    trimmed = value.strip()
+    return trimmed or None
+
+
+class DocumentCreate(BaseModel):
+    """Metadata supplied alongside the uploaded file (multipart form fields)."""
+
+    title: str = Field(max_length=255)
+    description: Optional[str] = Field(default=None, max_length=5000)
+    document_type: DocumentType = DocumentType.other
+    project_id: Optional[int] = None
+    customer: Optional[str] = Field(default=None, max_length=255)
+    uploaded_by: Optional[str] = Field(default=None, max_length=255)
+
+    @field_validator("title")
+    @classmethod
+    def title_not_blank(cls, v: str) -> str:
+        return _validate_name(v)
+
+    @field_validator("description", "customer", "uploaded_by")
+    @classmethod
+    def blank_to_none(cls, v: Optional[str]) -> Optional[str]:
+        return _optional_trimmed(v)
+
+    @field_validator("project_id")
+    @classmethod
+    def project_id_positive(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
+            raise ValueError("project_id must be a positive integer")
+        return v
+
+
+class DocumentUpdate(BaseModel):
+    """Partial metadata update (PATCH).
+
+    Only the fields present in the request body are applied, so a client can
+    clear `customer` by sending null without disturbing the other fields.
+    """
+
+    title: Optional[str] = Field(default=None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=5000)
+    document_type: Optional[DocumentType] = None
+    project_id: Optional[int] = None
+    customer: Optional[str] = Field(default=None, max_length=255)
+
+    @field_validator("title")
+    @classmethod
+    def title_not_blank(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        return _validate_name(v)
+
+    @field_validator("description", "customer")
+    @classmethod
+    def blank_to_none(cls, v: Optional[str]) -> Optional[str]:
+        return _optional_trimmed(v)
+
+    @field_validator("project_id")
+    @classmethod
+    def project_id_positive(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
+            raise ValueError("project_id must be a positive integer")
+        return v
+
+
+class DocumentResponse(BaseModel):
+    id: int
+    title: str
+    description: Optional[str] = None
+    document_type: str
+    project_id: Optional[int] = None
+    # Denormalised for display so the UI does not have to join client-side.
+    project_name: Optional[str] = None
+    customer: Optional[str] = None
+    uploaded_by: Optional[str] = None
+    filename: str
+    content_type: str
+    file_size: int
+    content_hash: str
+    storage_backend: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentListResponse(BaseModel):
+    """Paginated envelope — document repositories grow without bound, so the
+    list endpoint is paginated from day one."""
+
+    items: list[DocumentResponse]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

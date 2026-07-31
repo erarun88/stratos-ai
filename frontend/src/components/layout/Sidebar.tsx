@@ -2,8 +2,10 @@ import { NavLink } from 'react-router-dom'
 
 const navItems = [
   { to: '/', label: 'Dashboard', end: true },
-  { to: '/engineers', label: 'Engineers' },
+  { to: '/chat', label: 'ProjectAgent (AI)', icon: '🤖' },
   { to: '/projects', label: 'Projects' },
+  { to: '/engineers', label: 'Engineers' },
+  { to: '/documents', label: 'Documents' },
 ]
 
 export default function Sidebar() {
@@ -24,13 +26,14 @@ export default function Sidebar() {
             end={item.end}
             className={({ isActive }) =>
               [
-                'rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'rounded-md px-3 py-2 text-sm font-medium transition-colors flex items-center gap-2',
                 isActive
-                  ? 'bg-slate-900 text-white'
+                  ? 'bg-purple-600 text-white'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
               ].join(' ')
             }
           >
+            {item.icon && <span>{item.icon}</span>}
             {item.label}
           </NavLink>
         ))}

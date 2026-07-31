@@ -511,6 +511,92 @@ async def get_projects():  # async def
 
 ---
 
+### ADR-010: Store Document Binaries Outside the Database, Behind a Storage Interface
+
+**Date**: 2026-07-26
+
+**Status**: ✅ Accepted
+
+**Context**:
+The Document Management module needs to persist PDFs. Three options were considered:
+
+1. **BYTEA / large objects in PostgreSQL** — transactional with the metadata, but bloats
+   the database, slows backups, and makes streaming awkward. Supabase storage is the most
+   expensive place to keep megabytes of inert bytes.
+2. **Cloud object storage now (S3 / Azure Blob)** — the production answer, but adds a
+   credential, a vendor dependency and local-development friction in a sprint where no AI
+   or cloud work is in scope.
+3. **Local filesystem behind an interface** — chosen.
+
+**Decision**:
+Blobs are written through the `DocumentStorage` interface (`app/storage/base.py`), with a
+local filesystem implementation today. The database stores only `storage_backend` and an
+opaque `storage_key`; `get_document_storage()` selects the backend from configuration.
+
+**Consequences**:
+- ✅ Database stays small; backups and queries stay fast
+- ✅ Adding S3/Azure is one new class plus a config value — no schema, service or API change
+- ✅ `storage_backend` is per-row, so existing objects can be migrated gradually
+- ⚠️ Blob writes are not transactional with the metadata insert. Mitigated by writing the
+  blob first and deleting it if the commit fails (compensating action), so storage is never
+  left with an object no row points to
+- ⚠️ The local backend does not work across multiple app instances — moving to S3 is a
+  prerequisite for horizontal scaling
+
+---
+
+### ADR-011: Soft Delete for Documents
+
+**Date**: 2026-07-26
+
+**Status**: ✅ Accepted
+
+**Context**:
+Projects and engineers are never hard-deleted (status change is the retirement path), but a
+document repository genuinely needs a delete action. Documents are also contractual and
+audit-relevant, and future versioning/approval workflows need the history.
+
+**Decision**:
+`DELETE /documents/{id}` sets `deleted_at`. Every query filters `deleted_at IS NULL`, so the
+document vanishes from the API. A separate retention job, `app/purge_documents.py`, removes
+the blob after a configurable window (default 30 days, dry-run by default).
+
+**Consequences**:
+- ✅ Consistent with the project's existing "preserve history" stance
+- ✅ Restore, versioning and audit trails become cheap to add
+- ✅ Blob storage is still reclaimed, just asynchronously
+- ⚠️ Until the retention job runs, deleted content is still on disk — a consideration for
+  GDPR/right-to-erasure requests, which will need an immediate-purge path
+- ⚠️ The job must actually be scheduled, or storage grows without bound
+
+---
+
+### ADR-012: Routers + Service Layer for New Modules
+
+**Date**: 2026-07-26
+
+**Status**: ✅ Accepted (implements ADR-P02 for new modules)
+
+**Context**:
+`main.py` had grown to ~280 lines with every endpoint inline. The Document module adds
+uploads, streaming, validation and storage orchestration — materially more logic than a
+CRUD handler should carry.
+
+**Decision**:
+New modules ship as an `APIRouter` (`app/routers/`) plus a service module
+(`app/services/`). Services contain the rules and import no FastAPI; they raise domain
+exceptions from `app/services/exceptions.py`, which routers translate into status codes.
+Existing Project/Engineer/Dashboard endpoints were **not** refactored — that is a separate,
+reviewable change.
+
+**Consequences**:
+- ✅ Business logic is unit-testable without an HTTP client, and reusable by the future AI
+  ingestion pipeline
+- ✅ `main.py` stops growing linearly with the feature count
+- ⚠️ Two styles coexist in the codebase until the older endpoints are migrated
+
+---
+
 ## Proposed Decisions
 
 ### ADR-P01: Input Validation with Pydantic Models
@@ -687,7 +773,7 @@ Replaced with shared Base in `models/__init__.py` (ADR-006)
 
 ## Decision Summary
 
-### Accepted Decisions (8)
+### Accepted Decisions (11)
 - ✅ FastAPI web framework
 - ✅ PostgreSQL database
 - ✅ SQLAlchemy ORM
@@ -696,6 +782,9 @@ Replaced with shared Base in `models/__init__.py` (ADR-006)
 - ✅ Shared ORM Base
 - ✅ Environment configuration
 - ✅ CORS for development
+- ✅ Document blobs outside the database, behind a storage interface
+- ✅ Soft delete for documents (+ retention job)
+- ✅ Routers + service layer for new modules
 
 ### Proposed Decisions (4)
 - 📋 Pydantic validation
@@ -728,8 +817,9 @@ When making new architectural decisions:
 | 2026-06-15 | Architect | ADR-001, ADR-002, ADR-004, ADR-005 | Accepted |
 | 2026-06-20 | Architect | ADR-003, ADR-007 | Accepted |
 | 2026-07-22 | Team | ADR-006, ADR-008, ADR-009, ADR-P01-P04, ADR-DEP01 | Updated |
+| 2026-07-26 | Team | ADR-010, ADR-011, ADR-012 (Document Management) | Accepted |
 
 ---
 
-**Last Updated**: 2026-07-22
+**Last Updated**: 2026-07-26
 **Next Review**: 2026-08-22

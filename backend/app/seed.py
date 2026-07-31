@@ -5,13 +5,18 @@ from app.database import engine
 from app.models import Base
 from app.models.project import Project
 from app.models.engineer import Engineer
+from app.models.document import Document
 
 # Create all tables
 Base.metadata.create_all(engine)
 
 session = Session(engine)
 
-# Clear existing data
+# Clear existing data. Documents go first: they reference projects, so the
+# project rows cannot be removed while document rows still point at them.
+# Note this clears metadata only — stored files are removed by
+# `python -m app.purge_documents`.
+session.query(Document).delete()
 session.query(Engineer).delete()
 session.query(Project).delete()
 session.commit()

@@ -32,6 +32,9 @@ htmlcov/
 dist/
 build/
 
+# Uploaded documents (local storage backend)
+backend/storage/
+
 # Node / frontend
 node_modules/
 frontend/.env

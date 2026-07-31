@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(backend/venv/bin/python -c \"import fastapi, sqlalchemy; print\\(fastapi.__version__, sqlalchemy.__version__\\)\")",
+      "Bash(timeout 25 venv/bin/python -c ' *)",
+      "Bash(venv/bin/pip install *)",
+      "Bash(venv/bin/python -c \"import multipart; print\\('multipart ok'\\)\")",
+      "Bash(timeout 60 venv/bin/python -m app.migrate_documents)",
+      "Read(//root/.cache/**)",
+      "Bash(python3 -c \"import playwright; print\\('playwright'\\)\")",
+      "Bash(pkill -f \"uvicorn app.main:app\")",
+      "Bash(pkill -f \"vite\")",
+      "Bash(venv/bin/python -)",
+      "Bash(kill 40206 40207)",
+      "Bash(venv/bin/python -c ' *)"
+    ]
+  }
+}

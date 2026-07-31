@@ -183,6 +183,86 @@ INSERT INTO engineers VALUES
 
 ---
 
+#### 3. **Documents Table**
+
+**Purpose**: Metadata catalogue for the document repository. The file itself is
+never stored in the database — only a pointer to it (`storage_backend` +
+`storage_key`), which is what allows the local filesystem backend to be replaced
+by S3/Azure Blob without a schema change.
+
+**Table Name**: `documents`
+
+```sql
+CREATE TABLE documents (
+    id               SERIAL PRIMARY KEY,
+    title            VARCHAR(255) NOT NULL,
+    description      TEXT,
+    document_type    VARCHAR(50)  NOT NULL DEFAULT 'other',
+    project_id       INTEGER REFERENCES projects(id),
+    customer         VARCHAR(255),
+    uploaded_by      VARCHAR(255),
+    filename         VARCHAR(255) NOT NULL,
+    content_type     VARCHAR(100) NOT NULL,
+    file_size        BIGINT       NOT NULL,
+    content_hash     VARCHAR(64)  NOT NULL,
+    storage_backend  VARCHAR(30)  NOT NULL DEFAULT 'local',
+    storage_key      VARCHAR(500) NOT NULL UNIQUE,
+    created_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ  NOT NULL DEFAULT now(),
+    deleted_at       TIMESTAMPTZ
+);
+```
+
+> Created on the live Supabase database by the idempotent script
+> `backend/app/migrate_documents.py` (`python -m app.migrate_documents`), following
+> the same pattern as `migrate.py` since the project has no Alembic yet (ADR-P03).
+
+**Columns**:
+
+| Column | Type | Nullable | Constraints | Description |
+|--------|------|----------|-------------|-------------|
+| `id` | INTEGER | No | PRIMARY KEY | Unique document identifier (auto-increment) |
+| `title` | VARCHAR(255) | No | non-blank (app-level) | Human-readable document title |
+| `description` | TEXT | Yes | ≤ 5000 chars (app-level) | Free-text description |
+| `document_type` | VARCHAR(50) | No | app-level enum | `contract`, `sow`, `proposal`, `report`, `specification`, `meeting_minutes`, `other` |
+| `project_id` | INTEGER | Yes | FOREIGN KEY → projects(id) | Associated project; NULL for organisation-wide documents |
+| `customer` | VARCHAR(255) | Yes | None | Customer association; defaults to the project's customer on upload |
+| `uploaded_by` | VARCHAR(255) | Yes | None | Uploader label; becomes a `users.id` FK when authentication lands |
+| `filename` | VARCHAR(255) | No | sanitised | Original client filename, kept for display and download |
+| `content_type` | VARCHAR(100) | No | `application/pdf` today | Verified MIME type of the stored blob |
+| `file_size` | BIGINT | No | ≤ `MAX_DOCUMENT_SIZE_MB` | Size in bytes, measured server-side while streaming |
+| `content_hash` | VARCHAR(64) | No | None | SHA-256 of the contents: integrity checks, duplicate detection, and the natural cache key for the future embedding pipeline |
+| `storage_backend` | VARCHAR(30) | No | DEFAULT `local` | Which storage backend owns the blob |
+| `storage_key` | VARCHAR(500) | No | UNIQUE | Opaque server-generated key, e.g. `project-1/2026/07/<uuid>.pdf` |
+| `created_at` | TIMESTAMPTZ | No | DEFAULT `now()` | Upload timestamp |
+| `updated_at` | TIMESTAMPTZ | No | DEFAULT `now()`, bumped on update | Last metadata change |
+| `deleted_at` | TIMESTAMPTZ | Yes | None | Soft-delete marker; every API query filters on `deleted_at IS NULL` |
+
+**Relationships**:
+- `documents.project_id → projects.id` (many-to-one, optional). Because the FK has no
+  `ON DELETE` rule, `seed.py` clears documents before projects.
+
+**Indexes (Implemented)**:
+```sql
+-- Partial indexes: every API query also filters deleted_at IS NULL, so only
+-- live rows need to be indexed.
+CREATE INDEX ix_documents_project_id    ON documents (project_id)    WHERE deleted_at IS NULL;
+CREATE INDEX ix_documents_document_type ON documents (document_type) WHERE deleted_at IS NULL;
+CREATE INDEX ix_documents_customer      ON documents (customer)      WHERE deleted_at IS NULL;
+CREATE INDEX ix_documents_deleted_at    ON documents (deleted_at);
+CREATE INDEX ix_documents_created_at    ON documents (created_at DESC);
+CREATE INDEX ix_documents_content_hash  ON documents (content_hash);
+```
+
+**Planned (next sprint)**:
+```sql
+-- Free-text search currently uses ILIKE '%term%', which cannot use an index.
+CREATE INDEX idx_documents_search_tsvector ON documents
+  USING GIN (to_tsvector('english', title || ' ' || coalesce(description, '')));
+```
+
+---
+
 ### Planned Tables
 
 #### 3. **Assignments Table** (Future)
@@ -359,6 +439,14 @@ erDiagram
 ```sql
 -- Implicitly created on primary keys
 CREATE INDEX idx_engineers_project_id ON engineers(project_id);
+
+-- Documents (created by app/migrate_documents.py)
+CREATE INDEX ix_documents_project_id    ON documents (project_id)    WHERE deleted_at IS NULL;
+CREATE INDEX ix_documents_document_type ON documents (document_type) WHERE deleted_at IS NULL;
+CREATE INDEX ix_documents_customer      ON documents (customer)      WHERE deleted_at IS NULL;
+CREATE INDEX ix_documents_deleted_at    ON documents (deleted_at);
+CREATE INDEX ix_documents_created_at    ON documents (created_at DESC);
+CREATE INDEX ix_documents_content_hash  ON documents (content_hash);
 ```
 
 ### Recommended Indexes (Planned)

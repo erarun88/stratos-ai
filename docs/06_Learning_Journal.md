@@ -445,6 +445,117 @@ The Recent Projects and Recent Engineers tables didn't need new status pills —
 
 ---
 
+## 📚 New Concepts: The Document Management Module (Files, Not Just Rows)
+
+Every module so far moved *rows* around. This one moves *files*, and files bring a
+whole new category of problems.
+
+### 33. Why files don't go in the database
+
+You *can* store a PDF in a PostgreSQL `BYTEA` column. You mostly shouldn't. The
+database is the most expensive storage you own — every backup copies those bytes,
+every restore rewrites them, and the query planner gets nothing useful out of them.
+So the row stores **metadata plus a pointer** (`storage_backend`, `storage_key`), and
+the bytes live somewhere designed for bytes.
+
+### 34. Programming to an interface (the storage abstraction)
+
+We store files on the local disk today, but production will use S3 or Azure Blob. If
+`document_service.py` called `open()` directly, that migration would mean rewriting the
+service. Instead there's an interface — `save`, `open`, `delete`, `exists` — and the
+service only ever talks to *that*. Adding S3 becomes: write one new class, change one
+config value. **This is the whole point of an abstraction: it puts a seam where you
+expect change.**
+
+### 35. Never trust the client (three layers of upload validation)
+
+A browser tells you a file's name and its Content-Type. Both are just strings the client
+chose, and both can lie. So the upload is checked three ways:
+
+1. **Extension** — must be `.pdf`
+2. **Declared Content-Type** — must be `application/pdf`
+3. **Magic number** — the first bytes of the actual file must be `%PDF-`
+
+Only the third one is evidence. The first two are cheap filters that catch honest
+mistakes early. A renamed `virus.exe` passes 1 and 2 and fails 3.
+
+### 36. Streaming, and why `Content-Length` isn't a size limit
+
+The obvious way to enforce "max 25 MB" is to read the request header. But a malicious
+client can send a header that says 1 MB and then keep sending forever. The real limit
+is enforced **while reading**: count bytes chunk by chunk and abort the moment the total
+crosses the line. Same idea on the way out — downloads are streamed in 1 MB chunks, so
+serving a 25 MB PDF doesn't put 25 MB into the server's memory.
+
+### 37. Path traversal, and why filenames never become paths
+
+If a user uploads a file called `../../../../etc/passwd` and you build a path out of that
+name, you have just let them write anywhere on the server. Two defences here:
+the storage key is a **server-generated UUID** (the client's name is never part of any
+path), and the local backend **resolves every key and rejects anything that lands outside
+the storage root**. The original filename is kept only as a label to show in the UI and
+put in the download header.
+
+### 38. Two systems that can disagree (blob + row)
+
+The database can roll back. The filesystem can't. So what happens if the file is written
+and *then* the `INSERT` fails? You'd have an orphan blob nobody can reach. The fix is a
+**compensating action**: on commit failure, delete the blob we just wrote. Writing the
+blob first (not last) is deliberate — an upload that fails validation never touches the
+metadata table.
+
+### 39. Soft delete — hiding vs. destroying
+
+`DELETE /documents/{id}` doesn't remove the row. It stamps `deleted_at`, and every query
+adds `WHERE deleted_at IS NULL`. From the user's perspective the document is gone; from
+the auditor's perspective it never left. The blob is reclaimed later by a scheduled job.
+This is why "delete" in enterprise software is so often two different operations: the
+*business* delete (immediate, reversible) and the *physical* delete (deferred, final).
+
+### 40. Pagination is not a nice-to-have
+
+`GET /projects` returns a plain list because there will never be a million projects. A
+document repository *will* grow without bound, so `GET /documents` was paginated from
+day one: `{items, total, page, page_size, total_pages}`. Retro-fitting pagination is a
+breaking API change; starting with it costs nothing.
+
+Related detail: the sort always includes `id` as a tie-breaker. Without it, two documents
+with the same `created_at` can shuffle between pages — so you'd see one twice and miss
+the other.
+
+### 41. Escaping user input inside `LIKE`
+
+SQLAlchemy protects you from SQL injection by parameterising queries. It does **not**
+stop a user typing `%` into the search box, which inside a `LIKE` pattern means "match
+anything". That's not a security hole, but it is a correctness bug — so wildcards in the
+search term are escaped, and `%` searches for a literal percent sign.
+
+### 42. Debouncing the search box
+
+Typing "contract" is 8 keystrokes. Firing a request per keystroke means 8 requests, and
+the answers can arrive out of order. A **debounce** waits 300 ms after the user stops
+typing, so you get one request for the finished word.
+
+### 43. Letting the browser do the download
+
+The download button is a plain `<a href>`, not JavaScript that fetches into memory. The
+API sets `Content-Disposition: attachment`, and the browser handles the rest — with a
+native progress indicator, and no risk of buffering a large file into a JS variable. The
+simplest option was also the most scalable one.
+
+### 44. Layering: router → service → storage/model
+
+This module is the first to split its code up: the router knows about HTTP (status codes,
+form fields), the service knows about the rules (validation, hashing, ordering of
+operations), and neither knows about the other's concerns. The service imports no FastAPI
+at all — which is exactly what makes it reusable later by the AI pipeline that will read
+these documents.
+
+The mechanism is **domain exceptions**: the service raises `DocumentTooLargeError`, and
+the router is the only place that decides that means HTTP 413.
+
+---
+
 ## 🔧 Current Project Setup (What We Have Now)
 
 ### Backend Structure

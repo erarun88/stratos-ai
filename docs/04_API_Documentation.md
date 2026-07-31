@@ -630,6 +630,191 @@ curl http://localhost:8000/projects/1/engineers
 
 ---
 
+### Documents Endpoints
+
+Central repository for project and customer documents. PDF is the only accepted
+format in this release. Uploads are validated on extension, Content-Type and the
+file's magic number, and the size limit (`MAX_DOCUMENT_SIZE_MB`, default 25 MB) is
+enforced while streaming rather than trusting `Content-Length`.
+
+#### POST /documents
+
+**Description**: Upload a PDF and register its metadata.
+
+**Content-Type**: `multipart/form-data`
+
+**Form fields**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `file` | file | Yes | The PDF to upload |
+| `title` | string | Yes | Human-readable title (non-blank, ≤ 255 chars) |
+| `document_type` | enum | No | `contract`, `sow`, `proposal`, `report`, `specification`, `meeting_minutes`, `other` (default `other`) |
+| `description` | string | No | ≤ 5000 chars |
+| `project_id` | integer | No | Must reference an existing project; empty string means "not project-specific" |
+| `customer` | string | No | Defaults to the selected project's customer |
+| `uploaded_by` | string | No | Uploader name (placeholder until authentication exists) |
+
+**Request**:
+```bash
+curl -X POST http://localhost:8000/documents \
+  -F "file=@msa.pdf;type=application/pdf" \
+  -F "title=Master Services Agreement" \
+  -F "document_type=contract" \
+  -F "project_id=1"
+```
+
+**Response** (201 Created):
+```json
+{
+  "id": 1,
+  "title": "Master Services Agreement",
+  "description": null,
+  "document_type": "contract",
+  "project_id": 1,
+  "project_name": "CloudSync Platform",
+  "customer": "TechCorp Inc.",
+  "uploaded_by": null,
+  "filename": "msa.pdf",
+  "content_type": "application/pdf",
+  "file_size": 184320,
+  "content_hash": "cfa3181c1ee36e8bce5e39f84959f4558ea7ba32c0e4539a8ab3c8ce8c716ec6",
+  "storage_backend": "local",
+  "created_at": "2026-07-26T19:53:47.810109Z",
+  "updated_at": "2026-07-26T19:53:47.810109Z"
+}
+```
+
+**Status Codes**:
+- `201`: Created
+- `400`: Empty file, or `project_id` references a project that does not exist
+- `413`: File exceeds the configured maximum size
+- `415`: Not a PDF (bad extension, Content-Type, or magic number)
+- `422`: Metadata validation failed (e.g. blank title)
+- `503`: Storage backend unavailable
+
+---
+
+#### GET /documents
+
+**Description**: Search, filter, sort and page through the repository.
+
+**Query parameters**:
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `search` | string | — | Case-insensitive match on title, filename, description or customer |
+| `document_type` | enum | — | Filter by document type |
+| `project_id` | integer | — | Filter by project |
+| `customer` | string | — | Case-insensitive customer match |
+| `page` | integer | `1` | 1-based page number |
+| `page_size` | integer | `20` | Max 100 |
+| `sort_by` | enum | `created_at` | `created_at`, `title`, `file_size`, `document_type` |
+| `sort_order` | enum | `desc` | `asc` or `desc` |
+
+**Request**:
+```bash
+curl "http://localhost:8000/documents?search=agreement&document_type=contract&page=1&page_size=20"
+```
+
+**Response** (200 OK):
+```json
+{
+  "items": [ { "id": 1, "title": "Master Services Agreement", "...": "..." } ],
+  "total": 1,
+  "page": 1,
+  "page_size": 20,
+  "total_pages": 1
+}
+```
+
+Soft-deleted documents are never returned.
+
+**Status Codes**:
+- `200`: Success
+- `422`: Invalid query parameter (e.g. `page_size` above 100)
+
+---
+
+#### GET /documents/{id}
+
+**Description**: Retrieve a single document's metadata.
+
+**Status Codes**:
+- `200`: Success
+- `404`: Document not found (or soft-deleted)
+
+---
+
+#### GET /documents/{id}/download
+
+**Description**: Stream the stored file. The response is chunked from the storage
+backend rather than buffered in memory.
+
+**Response headers**:
+```
+Content-Type: application/pdf
+Content-Disposition: attachment; filename="msa.pdf"; filename*=UTF-8''msa.pdf
+Content-Length: 184320
+X-Content-Type-Options: nosniff
+```
+
+**Status Codes**:
+- `200`: Success
+- `404`: Document not found, soft-deleted, or its blob is missing from storage
+
+---
+
+#### PATCH /documents/{id}
+
+**Description**: Partial metadata update. The stored file is immutable — replacing
+contents means uploading a new document.
+
+**Request Body** (all fields optional):
+```json
+{
+  "title": "Master Services Agreement (Signed)",
+  "description": "Countersigned copy",
+  "document_type": "contract",
+  "project_id": 2,
+  "customer": "TechCorp Inc."
+}
+```
+
+**Status Codes**:
+- `200`: Updated
+- `400`: `project_id` references a project that does not exist
+- `404`: Document not found
+- `422`: Validation failed
+
+---
+
+#### DELETE /documents/{id}
+
+**Description**: Delete a document. This is a **soft delete**: the row is marked with
+`deleted_at` and disappears from every API response, but is retained for audit. The
+underlying blob is reclaimed later by the retention job
+(`python -m app.purge_documents --days 30 --apply`).
+
+**Response**: `204 No Content` (empty body)
+
+**Status Codes**:
+- `204`: Deleted
+- `404`: Document not found (including a second delete of the same document)
+
+---
+
+#### GET /projects/{project_id}/documents
+
+**Description**: List the documents filed against a project. Same paginated envelope
+as `GET /documents`; supports `search`, `document_type`, `page` and `page_size`.
+
+**Status Codes**:
+- `200`: Success
+- `404`: Project not found
+
+---
+
 ### Dashboard Endpoints
 
 Executive dashboard aggregations computed live from the database (no cached or

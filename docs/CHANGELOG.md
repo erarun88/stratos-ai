@@ -10,6 +10,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] - Development
 
 ### Added
+- **Document Management module** (full-stack) — centralized, AI-ready document repository:
+  - Backend:
+    - `Document` ORM model + `documents` table (metadata only; binaries are stored outside the database)
+    - Storage abstraction `app/storage/` — `DocumentStorage` interface with a local filesystem backend (atomic writes, path-traversal guard); backend chosen by `DOCUMENT_STORAGE_BACKEND`, so S3/Azure Blob can be added without schema, service or API changes (ADR-010)
+    - Service layer `app/services/document_service.py` + domain exceptions, with `app/routers/documents.py` as a thin HTTP layer (ADR-012)
+    - `POST /documents` — multipart upload with layered validation: extension, Content-Type, PDF magic number, and a streaming size limit (`MAX_DOCUMENT_SIZE_MB`, default 25 MB) that never trusts `Content-Length`
+    - `GET /documents` — paginated envelope (`items`/`total`/`page`/`page_size`/`total_pages`) with free-text search, type/project/customer filters and sorting; `ILIKE` wildcards in user input are escaped
+    - `GET /documents/{id}`, `PATCH /documents/{id}` (partial metadata update), `DELETE /documents/{id}` (soft delete, ADR-011)
+    - `GET /documents/{id}/download` — chunked streaming with RFC 6266 `Content-Disposition` and `X-Content-Type-Options: nosniff`
+    - `GET /projects/{project_id}/documents` — documents filed against a project
+    - SHA-256 `content_hash` recorded per document: integrity checks and duplicate detection now, the cache key for the future embedding pipeline later
+    - Storage keys are server-generated UUIDs (`project-1/2026/07/<uuid>.pdf`); client filenames are sanitised and used for display only
+    - `app/migrate_documents.py` — idempotent DDL for the `documents` table plus partial indexes on the API's filter columns
+    - `app/purge_documents.py` — retention job that reclaims blobs of soft-deleted documents (dry-run by default)
+    - `app/config.py` (environment-driven settings) and `app/logging_config.py` (central logging); `database.py` gained a `get_session()` request dependency
+    - `python-multipart` dependency (required by FastAPI for form/file uploads)
+  - Frontend:
+    - `pages/Documents.tsx` — repository table with debounced search, type/project filters, pagination, and loading/empty/error states
+    - `components/documents/` — `DocumentUploadModal` (file + metadata, client-side pre-validation), `DocumentEditModal` (metadata only), `DeleteDocumentModal`, `DocumentTypeBadge`
+    - `api/documents.ts` and `types/document.ts`; `api/client.ts` extended with `apiDelete`, `apiPostForm` (multipart) and `apiUrl`
+    - Downloads use a plain `<a href download>` so the browser streams the file natively
+    - "Documents" added to the sidebar and router
 - **Executive Dashboard module** (full-stack):
   - Backend:
     - `DashboardSummary` and `ProjectStatusCount` Pydantic schemas
@@ -82,6 +104,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Database queries not optimized with indexes
 - Engineers page is still read-only: its Add/Edit/Change-Status buttons are UI placeholders not yet wired to the API (Projects page is fully wired)
 - Dashboard does not auto-refresh (data loads on page visit)
+- Documents: local filesystem storage only — the app cannot yet be scaled to multiple instances without moving to object storage
+- Documents: no virus/malware scanning on upload
+- Documents: document search uses `ILIKE '%term%'`, which cannot use an index; a full-text (GIN) index is needed as volume grows
+- Documents: the retention job (`app/purge_documents.py`) must be scheduled, or blobs of deleted documents accumulate
+- Documents: with no authentication, any caller can download any document by id
 
 ---
 

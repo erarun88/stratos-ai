@@ -92,6 +92,7 @@ StratOS AI addresses these challenges through:
 - ✅ Engineers page — live table populated from `GET /engineers` with status badges
 - ✅ "Add Engineer", "Edit", and "Change Status" buttons on Engineers (UI only, not yet wired to the API)
 - ✅ Projects page — full CRUD: table, Add/Edit modals, Change Status, loading/empty/error states, all wired to the backend
+- ✅ Documents page — repository table with debounced search, type/project filters, pagination, upload/download/edit/delete, all wired to the backend
 
 ### Executive Dashboard
 - ✅ `GET /dashboard/summary` — Portfolio + team headline counts (9 metrics)
@@ -117,6 +118,19 @@ StratOS AI addresses these challenges through:
 - ✅ `PATCH /engineers/{id}/status` — Change status (`active` / `inactive` / `on_leave`)
 - ✅ `GET /projects/{project_id}/engineers` — List engineers assigned to a project
 - ❌ Hard delete — Intentionally not implemented; engineer records are never physically removed so staffing history is preserved. Use the status endpoint instead.
+
+### Document Management
+- ✅ `POST /documents` — Upload a PDF with metadata (multipart); validates extension, MIME type, PDF magic number and size limit
+- ✅ `GET /documents` — Paginated search/filter (free-text, document type, project, customer) with sorting
+- ✅ `GET /documents/{id}` — Get a single document's metadata (404 if not found)
+- ✅ `GET /documents/{id}/download` — Stream the stored file back (`Content-Disposition: attachment`)
+- ✅ `PATCH /documents/{id}` — Partial metadata update (title, description, type, project, customer)
+- ✅ `DELETE /documents/{id}` — Soft delete; the record is hidden from the API and retained for audit
+- ✅ `GET /projects/{project_id}/documents` — Documents filed against a project
+- ✅ Storage abstraction (`app/storage/`) — local filesystem today; S3/Azure Blob can be added without touching the API, service or schema
+- ✅ Retention job (`python -m app.purge_documents`) — reclaims blobs for documents soft-deleted beyond the retention window
+- Fields: `id`, `title`, `description`, `document_type`, `project_id`, `customer`, `uploaded_by`, `filename`, `content_type`, `file_size`, `content_hash`, `storage_backend`, `storage_key`, `created_at`, `updated_at`, `deleted_at`
+- ❌ AI processing (embeddings, chunking, semantic search, OCR) — out of scope this sprint; the module is the foundation those features will build on
 
 ---
 

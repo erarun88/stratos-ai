@@ -47,6 +47,7 @@ from app.approvals.approval_models import (
     ApprovalStatus,
     ApprovalType,
 )
+from app.execution_studio import emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +213,14 @@ class ApprovalManager:
         self.requests[req_id] = request
         self._audit_log("approval_created", req_id, requester_id)
 
+        # Emit event: approval request created
+        emit_event("ApprovalManager", "create_approval_request", metadata={
+            "approval_id": req_id,
+            "approval_type": action_type,
+            "requester_id": requester_id,
+            "deadline_hours": policy.timeout_hours,
+        })
+
         logger.info(
             f"Created approval request: {req_id} for {action_type} "
             f"(requested by {requester_id})"
@@ -251,6 +260,15 @@ class ApprovalManager:
         action = "approved" if approved else "rejected"
         self._audit_log(f"approval_{action}", request_id, approver_id, comment)
 
+        # Emit event: approval processed
+        emit_event("ApprovalManager", f"approval_{action}", metadata={
+            "approval_id": request_id,
+            "approver_id": approver_id,
+            "approval_type": request.type,
+            "status": request.status,
+            "pending_approvals": request.pending_approvals(),
+        })
+
         logger.info(
             f"Recorded {action} for {request_id} by {approver_id}. "
             f"Status: {request.status}, pending: {request.pending_approvals()}"
@@ -274,10 +292,26 @@ class ApprovalManager:
         if request.is_expired():
             request.status = ApprovalStatus.EXPIRED
             self._audit_log("approval_expired", request_id, "system")
+
+            # Emit event: approval expired
+            emit_event("ApprovalManager", "approval_expired", metadata={
+                "approval_id": request_id,
+                "approval_type": request.type,
+            })
+
             logger.warning(f"Approval request expired: {request_id}")
             return False
 
-        return request.status == ApprovalStatus.APPROVED
+        # Emit event: can_execute check
+        can_exec = request.status == ApprovalStatus.APPROVED
+        emit_event("ApprovalManager", "can_execute_check", metadata={
+            "approval_id": request_id,
+            "approval_type": request.type,
+            "can_execute": can_exec,
+            "status": request.status,
+        })
+
+        return can_exec
 
     def get_request(self, request_id: str) -> Optional[ApprovalRequest]:
         """Retrieve approval request by ID.

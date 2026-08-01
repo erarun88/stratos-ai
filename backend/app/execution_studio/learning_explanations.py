@@ -317,26 +317,69 @@ COMPONENT_EXPLANATIONS: Dict[str, ComponentExplanation] = {
 
 # Action explanations (why an action happened)
 ACTION_EXPLANATIONS: Dict[str, str] = {
+    # Chat Endpoint
+    "receive_query": "Receive user query at HTTP endpoint",
+    "return_response": "Return final response to user",
+
+    # Supervisor Agent
+    "route_query": "Route user query to determine which agents to use",
+    "select_agents": "Select which specialist agents are needed",
+    "answer": "Orchestrate agents and return unified answer",
+
+    # Specialist Agent Actions (ProjectAgent, RiskAgent, ScheduleAgent, DocumentAgent, FinanceAgent)
+    "answer_query": "Answer domain-specific question",
+    "determine_tools": "Determine which data lookup tools are needed",
+    "tools_selected": "Tools selected for data retrieval",
+    "execute_tools": "Execute tools to retrieve necessary data",
+    "tools_executed": "Tools executed and data retrieved",
+    "build_context": "Build context string from tool results",
+    "context_built": "Context prepared for LLM",
+    "invoke_llm": "Call LLM to generate response",
+    "llm_response_received": "LLM returned generated response",
+    "extract_citations": "Extract citations from tool results",
+    "citations_extracted": "Citations extracted and verified",
+    "apply_guardrails": "Apply quality and safety guardrails",
+    "guardrails_applied": "Guardrails validation complete",
+
+    # LLM Client
+    "generate_start": "Start LLM API call",
+    "generate_complete": "LLM API call succeeded",
+    "generate_failed": "LLM API call failed",
+
+    # Reflection Agent (Phase D)
+    "review_response": "Review and improve AI response quality",
+    "check_hallucinations": "Check for unsupported claims (hallucinations)",
+    "hallucinations_checked": "Hallucination risk assessment complete",
+    "verify_citations": "Verify citations support the response",
+    "citations_verified": "Citation verification complete",
+    "assess_clarity": "Assess response clarity and readability",
+    "clarity_assessed": "Clarity assessment complete",
+    "improve_answer": "Apply improvements to response",
+    "answer_improved": "Response improved successfully",
+
+    # Approval Manager (Phase E)
+    "create_approval_request": "Create approval request for sensitive action",
+    "approval_approved": "Action approved by authorized user",
+    "approval_rejected": "Action rejected by authorized user",
+    "approval_expired": "Approval request expired (deadline passed)",
+    "can_execute_check": "Check if action has been approved and can execute",
+
+    # Legacy actions (backwards compatibility)
     "supervisor_route_query": "Route user query to appropriate specialist agents",
     "supervisor_select_agents": "Select which agents to invoke based on query semantics",
     "supervisor_invoke_parallel": "Invoke multiple agents in parallel for speed",
     "supervisor_merge_responses": "Merge responses from multiple agents intelligently",
-
     "agent_execute": "Execute the agent to answer the question",
     "agent_determine_tools": "Determine which tools this agent needs",
     "agent_invoke_tools": "Execute tools to retrieve necessary data",
-
     "llm_generate": "Call LLM (Claude) to generate the response",
     "tool_lookup": "Look up data via a tool",
-
     "reflection_review": "Review response quality (hallucination detection)",
     "reflection_detect_hallucinations": "Check for unsupported claims",
     "reflection_improve": "Improve response clarity and citations",
-
     "approval_check": "Check if this action requires approval",
     "approval_create": "Create approval request for sensitive action",
     "approval_record": "Record approval decision",
-
     "planner_decompose": "Break complex request into subtasks",
     "executor_execute_task": "Execute a single task",
 }

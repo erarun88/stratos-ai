@@ -62,7 +62,20 @@ This is the complete architectural documentation for the Phase B/C transformatio
 
 ---
 
-### 5️⃣ **WHY DECISIONS** - ARCHITECTURAL_DECISIONS.md
+### 5️⃣ **PHASE D & E DETAILS** - PHASE_D_E_IMPLEMENTATION.md
+**For**: Quality gates and approval workflow implementation
+- Reflection Agent for post-generation quality review
+- Hallucination detection and citation verification
+- Approval Framework for sensitive action gating
+- Audit trail and async approval workflows
+- Integration with Supervisor pipeline
+- Production examples and testing
+
+**Read when**: Implementing quality gates, approval workflows, or enhancing system safety
+
+---
+
+### 6️⃣ **WHY DECISIONS** - ARCHITECTURAL_DECISIONS.md
 **For**: Understanding the "why" behind design choices
 - 10 key architectural decisions
 - Options considered
@@ -75,7 +88,7 @@ This is the complete architectural documentation for the Phase B/C transformatio
 
 ---
 
-### 6️⃣ **DISCOVERY PHASE** - ARCHITECTURE_REVIEW.md
+### 7️⃣ **DISCOVERY PHASE** - ARCHITECTURE_REVIEW.md
 **For**: Understanding what was wrong before and why it was changed
 - Current state (monolithic) issues
 - Scalability problems identified
@@ -86,7 +99,7 @@ This is the complete architectural documentation for the Phase B/C transformatio
 
 ---
 
-### 7️⃣ **PROJECT SUMMARY** - DELIVERY_SUMMARY.md
+### 8️⃣ **PROJECT SUMMARY** - DELIVERY_SUMMARY.md
 **For**: High-level summary of what was delivered
 - Executive summary
 - What was delivered (per phase)
@@ -123,15 +136,20 @@ This is the complete architectural documentation for the Phase B/C transformatio
 2. Study: PLATFORM_ARCHITECTURE.md → Complex Request Flow section
 3. Reference: TaskPlanner and TaskExecutor code
 
+#### Implement quality gates & reflection
+1. Read: PHASE_D_E_IMPLEMENTATION.md → Phase D section
+2. Study: reflection_agent.py code
+3. Reference: ReflectionAgent class and testing examples
+
+#### Implement approval workflows
+1. Read: PHASE_D_E_IMPLEMENTATION.md → Phase E section
+2. Study: approval_manager.py and approval_models.py code
+3. Reference: ApprovalManager class and HTTP endpoints
+
 #### Debug a request
 1. Enable logging: QUICK_REFERENCE.md → "Debugging"
 2. Check: PLATFORM_ARCHITECTURE.md → Request Routing Logic
 3. Reference: QUICK_REFERENCE.md → Common Issues
-
-#### Design Phase D or E feature
-1. Read: PLATFORM_ARCHITECTURE.md → Future Phases section
-2. Study: ARCHITECTURAL_DECISIONS.md → ADR-008, ADR-009
-3. Reference: AgentResponse fields (approval_required, etc.)
 
 #### Understand a design choice
 1. Reference: ARCHITECTURAL_DECISIONS.md (indexed by decision number)
@@ -157,9 +175,10 @@ This is the complete architectural documentation for the Phase B/C transformatio
 | What is Supervisor? | Section 2-3 | PHASE_B_IMPLEMENTATION.md |
 | How do agents work? | Section 1-2 | PLATFORM_ARCHITECTURE.md |
 | Task planning & execution | Section 2 | PHASE_C_IMPLEMENTATION.md |
+| Reflection & quality gates | Phase D section | PHASE_D_E_IMPLEMENTATION.md |
+| Approval workflow | Phase E section | PHASE_D_E_IMPLEMENTATION.md |
 | Response format | Section 3 | PHASE_B_IMPLEMENTATION.md |
 | Request routing | Section "Request Routing Logic" | PLATFORM_ARCHITECTURE.md |
-| Approval workflow | Section "Phase E" | PLATFORM_ARCHITECTURE.md |
 | Why design choice X? | ADR-X | ARCHITECTURAL_DECISIONS.md |
 
 ### File Locations
@@ -178,6 +197,8 @@ This is the complete architectural documentation for the Phase B/C transformatio
 | ProjectAgent | Project domain | app/agents/project_agent.py | QUICK_REFERENCE.md |
 | TaskPlanner | Decomposition | app/orchestration/task_planner.py | PHASE_C_IMPLEMENTATION.md |
 | TaskExecutor | Execution | app/orchestration/task_executor.py | PHASE_C_IMPLEMENTATION.md |
+| ReflectionAgent | Quality review | app/agents/reflection_agent.py | PHASE_D_E_IMPLEMENTATION.md |
+| ApprovalManager | Approval workflow | app/approvals/approval_manager.py | PHASE_D_E_IMPLEMENTATION.md |
 
 ---
 
@@ -189,11 +210,12 @@ This is the complete architectural documentation for the Phase B/C transformatio
 | PLATFORM_ARCHITECTURE.md | 75 | 1500 | Complete system design |
 | PHASE_B_IMPLEMENTATION.md | 50 | 1000 | Agent orchestration details |
 | PHASE_C_IMPLEMENTATION.md | 40 | 800 | Planning & execution details |
+| PHASE_D_E_IMPLEMENTATION.md | 60 | 1200 | Quality gates & approval workflows |
 | ARCHITECTURAL_DECISIONS.md | 45 | 900 | Design rationale |
 | ARCHITECTURE_REVIEW.md | 30 | 600 | Pre-transformation analysis |
 | DELIVERY_SUMMARY.md | 35 | 700 | Project delivery summary |
 | README_ARCHITECTURE.md | 20 | 400 | This file |
-| **TOTAL** | **~335** | **~7000** | Comprehensive documentation |
+| **TOTAL** | **~395** | **~8300** | Comprehensive documentation |
 
 ---
 
@@ -205,6 +227,7 @@ This is the complete architectural documentation for the Phase B/C transformatio
 - [ ] Skim ARCHITECTURAL_DECISIONS.md (design rationale)
 - [ ] Study PHASE_B_IMPLEMENTATION.md (agents)
 - [ ] Study PHASE_C_IMPLEMENTATION.md (planning)
+- [ ] Study PHASE_D_E_IMPLEMENTATION.md (quality & approval)
 
 ### For Maintainer
 - [ ] Reference QUICK_REFERENCE.md (common tasks)
@@ -246,10 +269,11 @@ This is the complete architectural documentation for the Phase B/C transformatio
 2. PLATFORM_ARCHITECTURE.md (complete system)
 3. PHASE_B_IMPLEMENTATION.md (agent details)
 4. PHASE_C_IMPLEMENTATION.md (planning details)
-5. ARCHITECTURAL_DECISIONS.md (why choices)
-6. Study code: agents/, orchestration/, tools/
+5. PHASE_D_E_IMPLEMENTATION.md (quality & approval)
+6. ARCHITECTURAL_DECISIONS.md (why choices)
+7. Study code: agents/, orchestration/, approvals/, tools/
 ```
-**Time**: 2-3 hours
+**Time**: 3-4 hours
 
 ### Path 4: I need to deploy to production
 ```
@@ -292,10 +316,15 @@ This is the complete architectural documentation for the Phase B/C transformatio
 **Simple requests**: Fast path through Supervisor  
 **Complex requests**: Decomposed via Planner, executed via Executor  
 
+### Completed Phases
+**Phase A**: Architecture analysis and transformation planning  
+**Phase B**: Multi-agent orchestration (Supervisor + Specialist Agents)  
+**Phase C**: Task planning and complex request handling  
+**Phase D**: Reflection agent for quality gates (✅ IMPLEMENTED)  
+**Phase E**: Approval framework for gated actions (✅ IMPLEMENTED)  
+
 ### The Future
-**Phase D**: Reflection agent for quality gates  
-**Phase E**: Approval framework for gated actions  
-**Phase F+**: Scaling, caching, custom agents  
+**Phase F+**: Scaling, caching, custom agents, persistent approval storage  
 
 ---
 

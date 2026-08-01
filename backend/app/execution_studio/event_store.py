@@ -9,7 +9,8 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy import Column, String, Float, Integer, DateTime, Text, JSON, Index, Boolean
 from sqlalchemy.orm import Session
 
-from app.database import Base, engine
+from app.database import engine
+from app.models import Base
 from app.execution_studio.event_model import ExecutionEvent, EventStatus, TraceMetrics
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class ExecutionEventModel(Base):
     latency_ms = Column(Float, default=0.0)
 
     # Data
-    metadata = Column(JSON, default={})
+    metadata_json = Column(JSON, default={})
     error = Column(Text, nullable=True)
 
     # System
@@ -67,7 +68,7 @@ class ExecutionEventModel(Base):
             tokens_used=self.tokens_used,
             cost=self.cost,
             latency_ms=self.latency_ms,
-            metadata=self.metadata or {},
+            metadata=self.metadata_json or {},
             error=self.error,
             created_at=self.created_at,
             indexed=True,
@@ -88,7 +89,7 @@ class ExecutionEventModel(Base):
             tokens_used=event.tokens_used,
             cost=event.cost,
             latency_ms=event.latency_ms,
-            metadata=event.metadata,
+            metadata_json=event.metadata,
             error=event.error,
             created_at=event.created_at,
         )

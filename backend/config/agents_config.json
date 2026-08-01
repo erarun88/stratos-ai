@@ -1,0 +1,44 @@
+{
+  "agents": {
+    "project_management": {
+      "class": "ProjectAgent",
+      "enabled": true,
+      "description": "Answers questions about project status, milestones, and scope",
+      "version": "1.0",
+      "settings": {
+        "strict_mode": false,
+        "timeout_seconds": 30
+      }
+    },
+    "risk_management": {
+      "class": "RiskAgent",
+      "enabled": true,
+      "description": "Answers questions about project risks, blockers, and escalations",
+      "version": "1.0",
+      "settings": {
+        "strict_mode": false,
+        "timeout_seconds": 30
+      }
+    },
+    "schedule": {
+      "class": "ScheduleAgent",
+      "enabled": true,
+      "description": "Answers questions about project schedules, milestones, and timelines",
+      "version": "1.0",
+      "settings": {
+        "strict_mode": false,
+        "timeout_seconds": 30
+      }
+    },
+    "document_management": {
+      "class": "DocumentAgent",
+      "enabled": true,
+      "description": "Answers questions using project documents and semantic search",
+      "version": "1.0",
+      "settings": {
+        "strict_mode": true,
+        "timeout_seconds": 30
+      }
+    }
+  }
+}

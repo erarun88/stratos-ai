@@ -1,0 +1,54 @@
+# Agent Registry Configuration
+# This file defines which agents are available and their settings.
+# Modify this to enable/disable agents or add new ones.
+
+agents:
+  # Project Management Agent
+  project_management:
+    class: ProjectAgent
+    enabled: true
+    description: "Answers questions about project status, milestones, and scope"
+    version: "1.0"
+    settings:
+      strict_mode: false
+      timeout_seconds: 30
+
+  # Risk Management Agent
+  risk_management:
+    class: RiskAgent
+    enabled: true
+    description: "Answers questions about project risks, blockers, and escalations"
+    version: "1.0"
+    settings:
+      strict_mode: false
+      timeout_seconds: 30
+
+  # Schedule/Timeline Agent
+  schedule:
+    class: ScheduleAgent
+    enabled: true
+    description: "Answers questions about project schedules, milestones, and timelines"
+    version: "1.0"
+    settings:
+      strict_mode: false
+      timeout_seconds: 30
+
+  # Document Management Agent (RAG)
+  document_management:
+    class: DocumentAgent
+    enabled: true
+    description: "Answers questions using project documents and semantic search"
+    version: "1.0"
+    settings:
+      strict_mode: true  # Stricter for document grounding
+      timeout_seconds: 30
+
+  # Finance Agent (Future)
+  # finance:
+  #   class: FinanceAgent
+  #   enabled: false
+  #   description: "Answers questions about project financials and budget"
+  #   version: "1.0"
+  #   settings:
+  #     strict_mode: false
+  #     timeout_seconds: 30

@@ -28,6 +28,7 @@ from app.agents import (
     ScheduleAgent,
     SupervisorAgent,
 )
+from app.agents.agent_registry import get_agent_registry, init_default_agents
 
 logger = logging.getLogger(__name__)
 
@@ -99,25 +100,39 @@ _supervisor = None
 def get_supervisor() -> SupervisorAgent:
     """Get or create the global Supervisor instance.
 
-    Initializes all specialist agents on first call.
+    Initializes all specialist agents from the Agent Registry.
+    If registry is empty, initializes with default agents.
     """
     global _supervisor
     if _supervisor is None:
-        logger.info("Initializing Supervisor Agent with Specialist Agents...")
+        logger.info("Initializing Supervisor Agent with registered agents...")
 
+        # Get agent registry (create if doesn't exist)
+        registry = get_agent_registry()
+
+        # If no agents registered, initialize defaults
+        if registry.count() == 0:
+            logger.info("No agents in registry, initializing defaults...")
+            init_default_agents()
+
+        # Create supervisor
         supervisor = SupervisorAgent()
 
-        # Register specialist agents
-        supervisor.register_agent("project_management", ProjectAgent())
-        supervisor.register_agent("risk_management", RiskAgent())
-        supervisor.register_agent("schedule", ScheduleAgent())
-        supervisor.register_agent("document_management", DocumentAgent())
+        # Register all enabled agents from registry
+        enabled_domains = registry.get_enabled_domains()
+        logger.info(f"Registering {len(enabled_domains)} enabled agents...")
 
-        # FinanceAgent not fully implemented yet, but registered for future use
-        # supervisor.register_agent("finance", FinanceAgent())
+        for domain in enabled_domains:
+            agent = registry.get(domain)
+            if agent:
+                supervisor.register_agent(domain, agent)
+                logger.info(f"  Registered: {domain}")
 
         _supervisor = supervisor
-        logger.info(f"Supervisor initialized with {len(supervisor.list_agents())} agents")
+        logger.info(
+            f"Supervisor initialized with {len(supervisor.list_agents())} agents "
+            f"from registry"
+        )
 
     return _supervisor
 
@@ -268,16 +283,111 @@ async def chat_stream(request: ChatRequest):
 
 @router.get("/agents")
 async def list_agents() -> dict:
-    """List available specialist agents."""
+    """List available specialist agents with metadata.
+
+    Returns both the supervisor's active agents and the full registry metadata.
+    """
     try:
         supervisor = get_supervisor()
+        registry = get_agent_registry()
+
         agents = supervisor.list_agents()
+        metadata = registry.list_metadata()
+
         return {
             "agents": agents,
             "count": len(agents),
+            "registry": {
+                "total": registry.count(),
+                "enabled": len(registry.get_enabled_domains()),
+                "metadata": metadata,
+            },
         }
     except Exception as e:
         logger.error(f"Error listing agents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/registry/status")
+async def get_registry_status() -> dict:
+    """Get Agent Registry status and configuration."""
+    try:
+        registry = get_agent_registry()
+        metadata = registry.list_metadata()
+
+        return {
+            "total_agents": registry.count(),
+            "enabled_agents": len(registry.get_enabled_domains()),
+            "disabled_agents": registry.count() - len(registry.get_enabled_domains()),
+            "enabled_domains": registry.get_enabled_domains(),
+            "metadata": metadata,
+        }
+    except Exception as e:
+        logger.error(f"Error getting registry status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/registry/agents/{domain}/enable")
+async def enable_agent(domain: str) -> dict:
+    """Enable an agent in the registry.
+
+    Args:
+        domain: Agent domain name
+
+    Returns:
+        Updated registry status
+    """
+    try:
+        registry = get_agent_registry()
+        success = registry.enable(domain)
+
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Agent not found: {domain}")
+
+        logger.info(f"Enabled agent: {domain}")
+
+        return {
+            "success": True,
+            "domain": domain,
+            "enabled": True,
+            "message": f"Agent '{domain}' enabled",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error enabling agent: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/registry/agents/{domain}/disable")
+async def disable_agent(domain: str) -> dict:
+    """Disable an agent in the registry.
+
+    Args:
+        domain: Agent domain name
+
+    Returns:
+        Updated registry status
+    """
+    try:
+        registry = get_agent_registry()
+        success = registry.disable(domain)
+
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Agent not found: {domain}")
+
+        logger.info(f"Disabled agent: {domain}")
+
+        return {
+            "success": True,
+            "domain": domain,
+            "enabled": False,
+            "message": f"Agent '{domain}' disabled",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error disabling agent: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -286,13 +396,15 @@ async def chat_health() -> dict:
     """Health check for chat endpoint."""
     try:
         supervisor = get_supervisor()
+        registry = get_agent_registry()
         agents = supervisor.list_agents()
 
         return {
             "status": "healthy",
             "supervisor": "operational",
+            "agents_active": len(agents),
+            "agents_registered": registry.count(),
             "agents": agents,
-            "agent_count": len(agents),
         }
     except Exception as e:
         logger.error(f"Health check failed: {e}")

@@ -30,7 +30,13 @@ from app.agents import (
     SupervisorAgent,
 )
 from app.agents.agent_registry import get_agent_registry, init_default_agents
-from app.execution_studio import ExecutionEvent, EventStatus, get_event_bus, get_event_store
+from app.execution_studio import (
+    ExecutionEvent,
+    EventStatus,
+    get_event_bus,
+    get_event_store,
+    set_request_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +164,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
     """
     start_time = time.time()
     request_id = str(uuid.uuid4())
+
+    # Set request_id in async context so all downstream components can access it
+    set_request_id(request_id)
+
     bus = get_event_bus()
     store = get_event_store()
 

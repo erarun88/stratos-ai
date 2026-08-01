@@ -57,6 +57,15 @@ from app.execution_studio.learning_explanations import (
     get_component_explanation,
     get_action_explanation,
 )
+from app.execution_studio.trace_context import (
+    set_request_id,
+    get_request_id,
+    clear_request_id,
+)
+from app.execution_studio.auto_tracer import (
+    auto_trace,
+    emit_event,
+)
 
 __all__ = [
     # Event Model
@@ -81,6 +90,13 @@ __all__ = [
     "Tracer",
     "trace_execution",
     "TracingContextManager",
+
+    # Auto-tracing (context-aware)
+    "set_request_id",
+    "get_request_id",
+    "clear_request_id",
+    "auto_trace",
+    "emit_event",
 
     # Learning
     "ComponentExplanation",

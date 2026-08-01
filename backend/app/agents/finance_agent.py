@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from app.agents.base_agent import Agent, AgentResponse, Citation
 from app.ai.guardrails import Guardrails
+from app.execution_studio import auto_trace, emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ For risks, refer to the Risk Agent.
 For schedules, refer to the Schedule Agent.
 """
 
+    @auto_trace(component="FinanceAgent", action="answer_query")
     async def answer(
         self,
         query: str,
@@ -84,22 +86,88 @@ For schedules, refer to the Schedule Agent.
         logger.info(f"FinanceAgent.answer: {query[:100]}...")
 
         try:
-            # TODO: Implement full logic similar to ProjectAgent
-            # For now, return a placeholder response
+            # Step 1: Determine tools to use
+            emit_event("FinanceAgent", "determine_tools")
+            tool_calls = await self._determine_tools(query, project_id)
+            emit_event("FinanceAgent", "tools_selected", metadata={"tool_count": len(tool_calls)})
 
-            answer = (
-                "Finance Agent is not yet fully implemented. "
-                "Please check back soon for budget, cost, and financial analysis."
+            # Step 2: Execute tools
+            emit_event("FinanceAgent", "execute_tools")
+            tool_results = await self._execute_tools(tool_calls)
+            tool_names = [t["tool"] for t in tool_calls]
+            emit_event("FinanceAgent", "tools_executed", metadata={"tool_count": len(tool_names)})
+
+            if not tool_results:
+                # TODO: Implement full logic similar to ProjectAgent
+                # For now, return a placeholder response
+                answer = (
+                    "Finance Agent is not yet fully implemented. "
+                    "Please check back soon for budget, cost, and financial analysis."
+                )
+                emit_event("FinanceAgent", "no_tool_results")
+                return await self.create_response(
+                    answer=answer,
+                    citations=[],
+                    confidence=0.0,
+                    tool_calls=tool_names,
+                    context_length=0,
+                    execution_time_ms=(time.time() - start_time) * 1000,
+                    metadata={"status": "placeholder"},
+                )
+
+            # Step 3: Build context from tool results
+            emit_event("FinanceAgent", "build_context")
+            context = self._build_context(tool_results, query)
+            context_length = len(context)
+            emit_event("FinanceAgent", "context_built", metadata={"context_length": context_length})
+
+            # Step 4: Generate response with LLM
+            emit_event("FinanceAgent", "invoke_llm")
+            system_prompt = self.get_system_prompt()
+            llm_response = await self.llm_client.generate(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": f"Context:\n{context}\n\nQuestion: {query}",
+                    }
+                ],
+                system_prompt=system_prompt,
+            )
+            emit_event("FinanceAgent", "llm_response_received", metadata={"response_length": len(llm_response)})
+
+            # Step 5: Extract citations
+            emit_event("FinanceAgent", "extract_citations")
+            citations = self._extract_citations(tool_results, llm_response)
+            emit_event("FinanceAgent", "citations_extracted", metadata={"citation_count": len(citations)})
+
+            # Step 6: Apply guardrails
+            emit_event("FinanceAgent", "apply_guardrails")
+            grounding_ok, grounding_score, _ = self.guardrails.ground_response(
+                llm_response, context
+            )
+            hallucination_risk, _ = self.guardrails.check_hallucination(llm_response, context)
+            confidence = self._calculate_confidence(hallucination_risk, grounding_ok, len(tool_names))
+            emit_event("FinanceAgent", "guardrails_applied", metadata={
+                "grounding_ok": grounding_ok,
+                "hallucination_risk": hallucination_risk,
+                "confidence": confidence
+            })
+
+            logger.info(
+                f"FinanceAgent response: grounding={grounding_ok}, "
+                f"hallucination_risk={hallucination_risk:.2f}, confidence={confidence:.2f}"
             )
 
+            # Step 7: Return response
             return await self.create_response(
-                answer=answer,
-                citations=[],
-                confidence=0.0,
-                tool_calls=[],
-                context_length=0,
+                answer=llm_response,
+                citations=citations,
+                confidence=confidence,
+                tool_calls=tool_names,
+                context_length=context_length,
+                hallucination_risk=hallucination_risk,
+                grounding_ok=grounding_ok,
                 execution_time_ms=(time.time() - start_time) * 1000,
-                metadata={"status": "placeholder"},
             )
 
         except Exception as e:
@@ -122,3 +190,25 @@ For schedules, refer to the Schedule Agent.
         """Determine which tools to use."""
         # TODO: Implement tool determination
         return []
+
+    def _build_context(self, tool_results, query: str) -> str:
+        """Build context string from tool results.
+
+        Args:
+            tool_results: List of ToolResult or Dict of tool -> ToolResult
+            query: Original query
+
+        Returns:
+            Context string for LLM
+        """
+        context_parts = []
+
+        # Handle both list and dict formats
+        items = tool_results if isinstance(tool_results, list) else tool_results.values()
+
+        for i, result in enumerate(items):
+            if result.success and result.data:
+                tool_name = f"Tool {i}" if isinstance(tool_results, list) else "Result"
+                context_parts.append(f"From {tool_name}:\n{result.data}")
+
+        return "\n\n".join(context_parts)

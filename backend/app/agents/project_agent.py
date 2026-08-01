@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional
 from app.agents.base_agent import Agent, AgentResponse, Citation
 from app.ai.guardrails import Guardrails
 from app.tools.project_lookup_tool import ProjectLookupTool
+from app.execution_studio import auto_trace, emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ For detailed schedules, recommend the Schedule Agent.
 For documents, recommend the Document Agent.
 """
 
+    @auto_trace(component="ProjectAgent", action="answer_query")
     async def answer(
         self,
         query: str,
@@ -87,13 +89,17 @@ For documents, recommend the Document Agent.
 
         try:
             # Step 1: Determine tools to use
+            emit_event("ProjectAgent", "determine_tools")
             tool_calls = await self._determine_tools(query, project_id)
             logger.debug(f"Tool calls: {[t['tool'] for t in tool_calls]}")
+            emit_event("ProjectAgent", "tools_selected", metadata={"tool_count": len(tool_calls)})
 
             # Step 2: Execute tools
+            emit_event("ProjectAgent", "execute_tools")
             tool_results = await self._execute_tools(tool_calls)
             tool_names = [t["tool"] for t in tool_calls]
             logger.debug(f"Tool results: {len(tool_results)} tools executed")
+            emit_event("ProjectAgent", "tools_executed", metadata={"tool_count": len(tool_names)})
 
             if not tool_results:
                 # No tools returned data
@@ -111,10 +117,13 @@ For documents, recommend the Document Agent.
                 )
 
             # Step 3: Build context from tool results
+            emit_event("ProjectAgent", "build_context")
             context = self._build_context(tool_results, query)
             context_length = len(context)
+            emit_event("ProjectAgent", "context_built", metadata={"context_length": context_length})
 
             # Step 4: Generate response with LLM
+            emit_event("ProjectAgent", "invoke_llm")
             system_prompt = self.get_system_prompt()
             llm_response = await self.llm_client.generate(
                 messages=[
@@ -125,16 +134,25 @@ For documents, recommend the Document Agent.
                 ],
                 system_prompt=system_prompt,
             )
+            emit_event("ProjectAgent", "llm_response_received", metadata={"response_length": len(llm_response)})
 
             # Step 5: Extract citations
+            emit_event("ProjectAgent", "extract_citations")
             citations = self._extract_citations(tool_results, llm_response)
+            emit_event("ProjectAgent", "citations_extracted", metadata={"citation_count": len(citations)})
 
             # Step 6: Apply guardrails
+            emit_event("ProjectAgent", "apply_guardrails")
             grounding_ok, grounding_score, _ = self.guardrails.ground_response(
                 llm_response, context
             )
             hallucination_risk, _ = self.guardrails.check_hallucination(llm_response, context)
             confidence = self._calculate_confidence(hallucination_risk, grounding_ok, len(tool_names))
+            emit_event("ProjectAgent", "guardrails_applied", metadata={
+                "grounding_ok": grounding_ok,
+                "hallucination_risk": hallucination_risk,
+                "confidence": confidence
+            })
 
             logger.info(
                 f"ProjectAgent response: grounding={grounding_ok}, "

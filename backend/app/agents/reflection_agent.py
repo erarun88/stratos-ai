@@ -19,6 +19,7 @@ from typing import Dict, Optional, Tuple
 
 from app.ai.guardrails import Guardrails
 from app.ai.llm_client import LLMClient
+from app.execution_studio import auto_trace, emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ class ReflectionAgent:
         self.guardrails = Guardrails(strict_mode=True)
         logger.info("ReflectionAgent initialized")
 
+    @auto_trace(component="ReflectionAgent", action="review_response")
     async def review(
         self,
         answer: str,
@@ -96,13 +98,25 @@ class ReflectionAgent:
 
         try:
             # Step 1: Detect hallucinations
+            emit_event("ReflectionAgent", "check_hallucinations")
             hallucination_risk, _ = self.guardrails.check_hallucination(answer, context)
+            emit_event("ReflectionAgent", "hallucinations_checked", metadata={
+                "hallucination_risk": hallucination_risk
+            })
 
             # Step 2: Verify citations
+            emit_event("ReflectionAgent", "verify_citations")
             citation_gaps = self._verify_citations(answer, citations or [])
+            emit_event("ReflectionAgent", "citations_verified", metadata={
+                "citation_gaps": len(citation_gaps)
+            })
 
             # Step 3: Check clarity
+            emit_event("ReflectionAgent", "assess_clarity")
             clarity_score = self._assess_clarity(answer)
+            emit_event("ReflectionAgent", "clarity_assessed", metadata={
+                "clarity_score": clarity_score
+            })
 
             # Step 4: Determine if improvement needed
             needs_improvement = (
@@ -117,9 +131,13 @@ class ReflectionAgent:
                 logger.info(f"Issues found: hallucination={hallucination_risk:.2f}, "
                            f"gaps={len(citation_gaps)}, clarity={clarity_score:.2f}")
 
+                emit_event("ReflectionAgent", "improve_answer")
                 improved_answer, improvement_reasoning = await self._improve_answer(
                     answer, citation_gaps, clarity_score, context
                 )
+                emit_event("ReflectionAgent", "answer_improved", metadata={
+                    "improvement_length": len(improved_answer) - len(answer)
+                })
             else:
                 improvement_reasoning = "Response is high quality, no improvements needed"
 

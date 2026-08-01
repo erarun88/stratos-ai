@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 from app.agents.base_agent import Agent, AgentResponse
 from app.ai.guardrails import Guardrails
 from app.tools.risk_lookup_tool import RiskLookupTool
+from app.execution_studio import auto_trace, emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ For financial impact, refer to the Finance Agent.
 For schedule impact, refer to the Schedule Agent.
 """
 
+    @auto_trace(component="RiskAgent", action="answer_query")
     async def answer(
         self,
         query: str,
@@ -79,11 +81,15 @@ For schedule impact, refer to the Schedule Agent.
 
         try:
             # Step 1: Determine tools to use
+            emit_event("RiskAgent", "determine_tools")
             tool_calls = await self._determine_tools(query, project_id)
+            emit_event("RiskAgent", "tools_selected", metadata={"tool_count": len(tool_calls)})
 
             # Step 2: Execute tools
+            emit_event("RiskAgent", "execute_tools")
             tool_results = await self._execute_tools(tool_calls)
             tool_names = [t["tool"] for t in tool_calls]
+            emit_event("RiskAgent", "tools_executed", metadata={"tool_count": len(tool_names)})
 
             if not tool_results:
                 answer = "No risk data available. Please provide a specific project ID."
@@ -97,9 +103,12 @@ For schedule impact, refer to the Schedule Agent.
                 )
 
             # Step 3: Build context
+            emit_event("RiskAgent", "build_context")
             context = self._build_context(tool_results)
+            emit_event("RiskAgent", "context_built", metadata={"context_length": len(context)})
 
             # Step 4: Generate response
+            emit_event("RiskAgent", "invoke_llm")
             system_prompt = self.get_system_prompt()
             llm_response = await self.llm_client.generate(
                 messages=[
@@ -110,16 +119,25 @@ For schedule impact, refer to the Schedule Agent.
                 ],
                 system_prompt=system_prompt,
             )
+            emit_event("RiskAgent", "llm_response_received", metadata={"response_length": len(llm_response)})
 
             # Step 5: Extract citations
+            emit_event("RiskAgent", "extract_citations")
             citations = self._extract_citations(tool_results, llm_response)
+            emit_event("RiskAgent", "citations_extracted", metadata={"citation_count": len(citations)})
 
             # Step 6: Apply guardrails
+            emit_event("RiskAgent", "apply_guardrails")
             grounding_ok, grounding_score, _ = self.guardrails.ground_response(
                 llm_response, context
             )
             hallucination_risk, _ = self.guardrails.check_hallucination(llm_response, context)
             confidence = self._calculate_confidence(hallucination_risk, grounding_ok, len(tool_names))
+            emit_event("RiskAgent", "guardrails_applied", metadata={
+                "grounding_ok": grounding_ok,
+                "hallucination_risk": hallucination_risk,
+                "confidence": confidence
+            })
 
             return await self.create_response(
                 answer=llm_response,

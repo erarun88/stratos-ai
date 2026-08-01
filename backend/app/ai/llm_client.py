@@ -9,9 +9,11 @@ Provides unified interface for:
 """
 
 import logging
+import time
 from typing import AsyncIterator, Optional
 
 from app.config import settings
+from app.execution_studio import emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +90,14 @@ class LLMClient:
         """
         max_tokens = max_tokens or self.max_tokens
         temperature = temperature or self.temperature
+        start_time = time.time()
+
+        # Emit event: LLM call starting
+        emit_event("LLMClient", "generate_start", metadata={
+            "model": self.model,
+            "provider": self.provider,
+            "max_tokens": max_tokens,
+        })
 
         try:
             if self.provider == "anthropic":
@@ -99,7 +109,19 @@ class LLMClient:
                     messages=messages,
                     timeout=self.timeout,
                 )
-                return response.content[0].text
+                result = response.content[0].text
+
+                # Emit event: LLM call succeeded
+                elapsed_ms = (time.time() - start_time) * 1000
+                emit_event("LLMClient", "generate_complete", metadata={
+                    "model": self.model,
+                    "provider": self.provider,
+                    "latency_ms": elapsed_ms,
+                    "result_length": len(result),
+                    "tokens_used": getattr(response.usage, 'output_tokens', 0),
+                })
+
+                return result
 
             elif self.provider == "openai":
                 messages_copy = messages.copy()
@@ -113,9 +135,32 @@ class LLMClient:
                     messages=messages_copy,
                     timeout=self.timeout,
                 )
-                return response.choices[0].message.content
+                result = response.choices[0].message.content
+
+                # Emit event: LLM call succeeded
+                elapsed_ms = (time.time() - start_time) * 1000
+                emit_event("LLMClient", "generate_complete", metadata={
+                    "model": self.model,
+                    "provider": self.provider,
+                    "latency_ms": elapsed_ms,
+                    "result_length": len(result),
+                    "tokens_used": getattr(response.usage, 'completion_tokens', 0),
+                })
+
+                return result
 
         except Exception as e:
+            # Emit event: LLM call failed
+            elapsed_ms = (time.time() - start_time) * 1000
+            emit_event("LLMClient", "generate_failed",
+                      error=str(e),
+                      duration_ms=elapsed_ms,
+                      metadata={
+                          "model": self.model,
+                          "provider": self.provider,
+                          "error_type": type(e).__name__,
+                      })
+
             logger.error(f"LLM generation failed: {e}", exc_info=True)
             raise RuntimeError(f"Failed to generate LLM response: {e}") from e
 

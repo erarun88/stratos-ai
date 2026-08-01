@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from app.agents.base_agent import Agent, AgentResponse
 from app.ai.guardrails import Guardrails
 from app.tools.schedule_lookup_tool import ScheduleLookupTool
+from app.execution_studio import auto_trace, emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ For financial impact of delays, refer to the Finance Agent.
 For risk mitigation, refer to the Risk Agent.
 """
 
+    @auto_trace(component="ScheduleAgent", action="answer_query")
     async def answer(
         self,
         query: str,
@@ -78,12 +80,18 @@ For risk mitigation, refer to the Risk Agent.
         logger.info(f"ScheduleAgent.answer: {query[:100]}...")
 
         try:
-            # Step 1: Determine tools
+            # Step 1: Determine tools to use
+            emit_event("ScheduleAgent", "determine_tools")
             tool_calls = await self._determine_tools(query, project_id)
+            logger.debug(f"Tool calls: {[t['tool'] for t in tool_calls]}")
+            emit_event("ScheduleAgent", "tools_selected", metadata={"tool_count": len(tool_calls)})
 
             # Step 2: Execute tools
+            emit_event("ScheduleAgent", "execute_tools")
             tool_results = await self._execute_tools(tool_calls)
             tool_names = [t["tool"] for t in tool_calls]
+            logger.debug(f"Tool results: {len(tool_results)} tools executed")
+            emit_event("ScheduleAgent", "tools_executed", metadata={"tool_count": len(tool_names)})
 
             if not tool_results:
                 answer = "No schedule data available. Please provide a specific project ID."
@@ -96,10 +104,14 @@ For risk mitigation, refer to the Risk Agent.
                     execution_time_ms=(time.time() - start_time) * 1000,
                 )
 
-            # Step 3: Build context
+            # Step 3: Build context from tool results
+            emit_event("ScheduleAgent", "build_context")
             context = self._build_context(tool_results)
+            context_length = len(context)
+            emit_event("ScheduleAgent", "context_built", metadata={"context_length": context_length})
 
-            # Step 4: Generate response
+            # Step 4: Generate response with LLM
+            emit_event("ScheduleAgent", "invoke_llm")
             system_prompt = self.get_system_prompt()
             llm_response = await self.llm_client.generate(
                 messages=[
@@ -110,16 +122,25 @@ For risk mitigation, refer to the Risk Agent.
                 ],
                 system_prompt=system_prompt,
             )
+            emit_event("ScheduleAgent", "llm_response_received", metadata={"response_length": len(llm_response)})
 
             # Step 5: Extract citations
+            emit_event("ScheduleAgent", "extract_citations")
             citations = self._extract_citations(tool_results, llm_response)
+            emit_event("ScheduleAgent", "citations_extracted", metadata={"citation_count": len(citations)})
 
             # Step 6: Apply guardrails
+            emit_event("ScheduleAgent", "apply_guardrails")
             grounding_ok, grounding_score, _ = self.guardrails.ground_response(
                 llm_response, context
             )
             hallucination_risk, _ = self.guardrails.check_hallucination(llm_response, context)
             confidence = self._calculate_confidence(hallucination_risk, grounding_ok, len(tool_names))
+            emit_event("ScheduleAgent", "guardrails_applied", metadata={
+                "grounding_ok": grounding_ok,
+                "hallucination_risk": hallucination_risk,
+                "confidence": confidence
+            })
 
             return await self.create_response(
                 answer=llm_response,

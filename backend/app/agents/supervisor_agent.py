@@ -27,6 +27,7 @@ from app.agents.base_agent import Agent, AgentResponse, Citation
 from app.agents.reflection_agent import ReflectionAgent
 from app.approvals import get_approval_manager, ApprovalType
 from app.ai.llm_client import LLMClient
+from app.execution_studio import ExecutionEvent, get_event_bus, get_event_store
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,7 @@ class SupervisorAgent:
         query: str,
         project_id: Optional[int] = None,
         required_domains: Optional[List[str]] = None,
+        request_id: Optional[str] = None,
     ) -> Dict:
         """Answer a complex query by coordinating specialist agents.
 
@@ -86,6 +88,7 @@ class SupervisorAgent:
             project_id: Optional project context
             required_domains: Optional list of domains to query.
                              If None, supervisor determines automatically.
+            request_id: Optional request ID for tracing (Execution Studio)
 
         Returns:
             Dict with:
@@ -97,12 +100,34 @@ class SupervisorAgent:
             - metadata: Orchestration details
         """
         start_time = time.time()
-        logger.info(f"Supervisor.answer: {query[:100]}... (project_id={project_id})")
+        bus = get_event_bus()
+        store = get_event_store()
+        logger.info(f"Supervisor.answer: {query[:100]}... (request_id={request_id[:8] if request_id else 'none'}..., project_id={project_id})")
+
+        # Publish start event
+        if request_id:
+            start_event = ExecutionEvent(
+                request_id=request_id,
+                component="SupervisorAgent",
+                action="route_query",
+                metadata={"query": query}
+            )
+            bus.publish(start_event)
 
         try:
             # Step 1: Determine which agents to invoke
             agent_domains = required_domains or await self._select_agents(query)
             logger.info(f"Selected agents: {agent_domains}")
+
+            # Publish agent selection event
+            if request_id:
+                select_event = ExecutionEvent(
+                    request_id=request_id,
+                    component="SupervisorAgent",
+                    action="select_agents",
+                    metadata={"selected_agents": agent_domains}
+                )
+                bus.publish(select_event)
 
             if not agent_domains:
                 return {
@@ -186,6 +211,19 @@ class SupervisorAgent:
                 },
             }
 
+            # Publish completion event
+            if request_id:
+                end_event = ExecutionEvent(
+                    request_id=request_id,
+                    component="SupervisorAgent",
+                    action="answer",
+                    status="completed",
+                    duration_ms=elapsed_ms,
+                    metadata={"agents_used": list(responses.keys())}
+                )
+                bus.publish(end_event)
+                store.store_event(end_event)
+
             logger.info(
                 f"Supervisor.answer complete: "
                 f"agents={len(responses)}, confidence={merged['confidence']:.2f}, "
@@ -196,6 +234,20 @@ class SupervisorAgent:
 
         except Exception as e:
             logger.error(f"Supervisor.answer failed: {e}", exc_info=True)
+
+            # Publish error event
+            if request_id:
+                error_event = ExecutionEvent(
+                    request_id=request_id,
+                    component="SupervisorAgent",
+                    action="answer",
+                    status="failed",
+                    error=str(e),
+                    duration_ms=(time.time() - start_time) * 1000
+                )
+                bus.publish(error_event)
+                store.store_event(error_event)
+
             return {
                 "answer": f"Error processing query: {str(e)}",
                 "citations": [],

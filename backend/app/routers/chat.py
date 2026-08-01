@@ -15,6 +15,7 @@ Internal architecture uses Supervisor Agent + Specialist Agents.
 import json
 import logging
 import time
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -29,6 +30,7 @@ from app.agents import (
     SupervisorAgent,
 )
 from app.agents.agent_registry import get_agent_registry, init_default_agents
+from app.execution_studio import ExecutionEvent, get_event_bus, get_event_store
 
 logger = logging.getLogger(__name__)
 
@@ -155,15 +157,30 @@ async def chat(request: ChatRequest) -> ChatResponse:
         ChatResponse with answer, citations, confidence, and agents used
     """
     start_time = time.time()
-    logger.info(f"Chat endpoint: {request.query[:100]}... (project_id={request.project_id})")
+    request_id = str(uuid.uuid4())
+    bus = get_event_bus()
+    store = get_event_store()
+
+    logger.info(f"Chat endpoint: {request.query[:100]}... (request_id={request_id[:8]}..., project_id={request.project_id})")
+
+    # Publish start event
+    start_event = ExecutionEvent(
+        request_id=request_id,
+        component="ChatEndpoint",
+        action="receive_query",
+        metadata={"query": request.query, "project_id": request.project_id}
+    )
+    bus.publish(start_event)
 
     try:
         supervisor = get_supervisor()
 
         # Route through Supervisor (orchestrates specialist agents)
+        # Pass request_id so Supervisor can publish events
         supervisor_response = await supervisor.answer(
             query=request.query,
             project_id=request.project_id,
+            request_id=request_id,  # NEW: Pass request_id for tracing
         )
 
         # Convert to API response format (backward compatible)
@@ -192,11 +209,24 @@ async def chat(request: ChatRequest) -> ChatResponse:
             metadata={
                 **supervisor_response.get("metadata", {}),
                 "elapsed_ms": elapsed_ms,
+                "request_id": request_id,
             },
         )
 
+        # Publish completion event
+        end_event = ExecutionEvent(
+            request_id=request_id,
+            component="ChatEndpoint",
+            action="return_response",
+            status="completed",
+            duration_ms=elapsed_ms,
+            metadata={"agents_used": response.agents_used}
+        )
+        bus.publish(end_event)
+        store.store_event(end_event)
+
         logger.info(
-            f"Chat endpoint complete: agents={len(response.agents_used)} "
+            f"Chat endpoint complete: request_id={request_id[:8]}..., agents={len(response.agents_used)} "
             f"confidence={response.confidence:.2f} elapsed_ms={elapsed_ms:.0f}"
         )
 
@@ -204,6 +234,19 @@ async def chat(request: ChatRequest) -> ChatResponse:
 
     except Exception as e:
         logger.error(f"Chat endpoint error: {e}", exc_info=True)
+
+        # Publish error event
+        error_event = ExecutionEvent(
+            request_id=request_id,
+            component="ChatEndpoint",
+            action="return_response",
+            status="failed",
+            error=str(e),
+            duration_ms=(time.time() - start_time) * 1000
+        )
+        bus.publish(error_event)
+        store.store_event(error_event)
+
         raise HTTPException(
             status_code=500,
             detail=f"Failed to process query: {str(e)}",

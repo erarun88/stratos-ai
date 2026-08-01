@@ -18,7 +18,7 @@ import time
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.agents import (
     DocumentAgent,
@@ -59,7 +59,7 @@ class Citation(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """Chat response."""
+    """Chat response with Phase D (Reflection) and Phase E (Approval) support."""
 
     answer: str = Field(description="The answer to the query")
     citations: list[Citation] = Field(default_factory=list, description="Source citations")
@@ -72,6 +72,23 @@ class ChatResponse(BaseModel):
     agents_used: list[str] = Field(
         default_factory=list, description="Agents that contributed to answer"
     )
+
+    # Phase D - Reflection
+    reflection_applied: bool = Field(
+        default=False, description="Whether reflection improved the response"
+    )
+
+    # Phase E - Approval
+    approval_required: bool = Field(
+        default=False, description="Whether action requires approval before execution"
+    )
+    approval_id: Optional[str] = Field(
+        default=None, description="Approval request ID if approval required"
+    )
+    approval_reason: Optional[str] = Field(
+        default=None, description="Reason why approval is required"
+    )
+
     metadata: dict = Field(default_factory=dict, description="Additional metadata")
 
 
@@ -153,6 +170,10 @@ async def chat(request: ChatRequest) -> ChatResponse:
             confidence=supervisor_response.get("confidence", 0.0),
             response_mode=request.response_mode,
             agents_used=supervisor_response.get("agents_used", []),
+            reflection_applied=supervisor_response.get("reflection_applied", False),
+            approval_required=supervisor_response.get("approval_required", False),
+            approval_id=supervisor_response.get("approval_id"),
+            approval_reason=supervisor_response.get("approval_reason"),
             metadata={
                 **supervisor_response.get("metadata", {}),
                 "elapsed_ms": elapsed_ms,
@@ -221,11 +242,14 @@ async def chat_stream(request: ChatRequest):
             yield json.dumps(citations_data)
             yield '}\n\n'
 
-            # Stream metadata
+            # Stream metadata (including Phase D and E)
             yield 'data: {"type": "metadata", '
             yield json.dumps({
                 "confidence": supervisor_response.get("confidence", 0.0),
                 "agents_used": supervisor_response.get("agents_used", []),
+                "reflection_applied": supervisor_response.get("reflection_applied", False),
+                "approval_required": supervisor_response.get("approval_required", False),
+                "approval_id": supervisor_response.get("approval_id"),
             })
             yield '}\n\n'
 

@@ -72,6 +72,10 @@ app.include_router(admin_router.router)
 from app.routers import chat as chat_router
 app.include_router(chat_router.router)
 
+# Approval Framework module (Phase E - Approval gating for dangerous actions)
+from app.routers import approvals as approvals_router
+app.include_router(approvals_router.router)
+
 @app.get("/")
 def home():
     return {"message": "Welcome to StratOS AI"}

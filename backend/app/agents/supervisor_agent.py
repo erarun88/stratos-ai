@@ -8,7 +8,9 @@ Responsibilities:
 3. Route queries to agents
 4. Execute agents in parallel when independent
 5. Merge results intelligently
-6. Return unified response
+6. Apply reflection for quality improvement (Phase D)
+7. Check for approval requirements (Phase E)
+8. Return unified response
 
 The Supervisor NEVER contains domain business logic.
 All domain logic lives in specialist agents.
@@ -22,6 +24,8 @@ import time
 from typing import Dict, List, Optional
 
 from app.agents.base_agent import Agent, AgentResponse, Citation
+from app.agents.reflection_agent import ReflectionAgent
+from app.approvals import get_approval_manager, ApprovalType
 from app.ai.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -49,8 +53,11 @@ class SupervisorAgent:
         """
         self.agents: Dict[str, Agent] = agents or {}
         self.llm_client = LLMClient()
+        self.reflection_agent = ReflectionAgent()  # Phase D
+        self.approval_manager = get_approval_manager()  # Phase E
 
-        logger.info(f"Supervisor initialized with {len(self.agents)} agents")
+        logger.info(f"Supervisor initialized with {len(self.agents)} agents "
+                   f"(with Reflection and Approval frameworks)")
 
     def register_agent(self, domain: str, agent: Agent) -> None:
         """Register a specialist agent.
@@ -116,18 +123,66 @@ class SupervisorAgent:
             # Step 3: Merge responses
             merged = self._merge_responses(responses, query)
 
-            # Step 4: Return unified response
+            # Step 4: Apply Phase D - Reflection for quality improvement
+            reflection_result = await self.reflection_agent.review(
+                answer=merged["answer"],
+                citations=merged["citations"],
+                context=query,
+                confidence=merged["confidence"],
+            )
+
+            # Use improved answer if reflection found and fixed issues
+            final_answer = reflection_result.improved_answer
+            reflection_applied = reflection_result.reflection_applied
+
+            # Step 5: Check Phase E - Approval requirements
+            approval_required = False
+            approval_id = None
+            approval_reason = None
+
+            # Detect if response suggests dangerous actions
+            dangerous_keywords = {
+                "delete": ApprovalType.DELETE_PROJECT,
+                "remove project": ApprovalType.DELETE_PROJECT,
+                "cancel project": ApprovalType.CHANGE_STATUS,
+                "close project": ApprovalType.CHANGE_STATUS,
+                "approve budget": ApprovalType.APPROVE_BUDGET,
+                "assign": ApprovalType.ASSIGN_CREWS,
+                "escalate": ApprovalType.ESCALATE_RISK,
+            }
+
+            for keyword, approval_type in dangerous_keywords.items():
+                if keyword in final_answer.lower():
+                    if self.approval_manager.requires_approval(approval_type):
+                        approval_req = self.approval_manager.create_approval_request(
+                            action_type=approval_type,
+                            action_description=final_answer[:200],
+                            requester_id="system",
+                            metadata={"query": query, "project_id": project_id},
+                        )
+                        approval_required = True
+                        approval_id = approval_req.id
+                        approval_reason = approval_req.reason
+                        logger.info(f"Approval required for {approval_type}: {approval_id}")
+                        break
+
+            # Step 6: Return unified response
             elapsed_ms = (time.time() - start_time) * 1000
 
             result = {
-                "answer": merged["answer"],
+                "answer": final_answer,
                 "citations": merged["citations"],
                 "confidence": merged["confidence"],
                 "agents_used": list(responses.keys()),
                 "execution_time_ms": elapsed_ms,
+                "reflection_applied": reflection_applied,
+                "approval_required": approval_required,
+                "approval_id": approval_id,
+                "approval_reason": approval_reason,
                 "metadata": {
                     "agent_count": len(responses),
                     "merge_strategy": "consensus",
+                    "reflection_reasoning": reflection_result.reflection_reasoning,
                 },
             }
 

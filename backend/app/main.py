@@ -76,6 +76,10 @@ app.include_router(chat_router.router)
 from app.routers import approvals as approvals_router
 app.include_router(approvals_router.router)
 
+# Execution Studio module (Transparency & Education)
+from app.routers import execution_studio_api as execution_studio_router
+app.include_router(execution_studio_router.router)
+
 @app.get("/")
 def home():
     return {"message": "Welcome to StratOS AI"}

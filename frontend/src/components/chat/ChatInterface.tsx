@@ -22,7 +22,18 @@ interface ChatInterfaceProps {
 }
 
 export default function ChatInterface({ projectId }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(() => {
+    // Load from localStorage on init
+    try {
+      const saved = localStorage.getItem('chatMessages')
+      return saved ? JSON.parse(saved).map((m: any) => ({
+        ...m,
+        timestamp: new Date(m.timestamp)
+      })) : []
+    } catch {
+      return []
+    }
+  })
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [responseMode, setResponseMode] = useState<'concise' | 'detailed' | 'executive'>(
@@ -30,6 +41,11 @@ export default function ChatInterface({ projectId }: ChatInterfaceProps) {
   )
   const [error, setError] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('chatMessages', JSON.stringify(messages))
+  }, [messages])
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -96,6 +112,7 @@ export default function ChatInterface({ projectId }: ChatInterfaceProps) {
 
   const handleClearChat = () => {
     setMessages([])
+    localStorage.removeItem('chatMessages')
     setError(null)
   }
 

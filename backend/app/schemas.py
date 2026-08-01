@@ -274,6 +274,13 @@ class DocumentResponse(BaseModel):
     storage_backend: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # Embedding status fields for AI features
+    embedding_status: Optional[str] = None
+    embedding_model: Optional[str] = None
+    token_count: Optional[int] = None
+    embedding_cost: Optional[float] = None
+    embedded_at: Optional[datetime] = None
+    embedding_error: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

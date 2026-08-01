@@ -88,7 +88,7 @@ class Settings:
     # --- LLM Configuration (Phase 2) ------------------------------------------
     llm_provider: str = os.getenv("LLM_PROVIDER", "anthropic")  # "anthropic" or "openai"
     llm_model: str = os.getenv("LLM_MODEL", "claude-3-5-sonnet-20241022")
-    llm_api_key: str = os.getenv("ANTHROPIC_API_KEY", os.getenv("LLM_API_KEY", ""))
+    llm_api_key: str = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY") or os.getenv("LLM_API_KEY", "")
     llm_max_tokens: int = _get_int("LLM_MAX_TOKENS", 2000)
     llm_temperature: float = float(os.getenv("LLM_TEMPERATURE", "0.7"))
     llm_timeout_seconds: int = _get_int("LLM_TIMEOUT_SECONDS", 30)

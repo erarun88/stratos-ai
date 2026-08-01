@@ -9,6 +9,7 @@ interface MessageBubbleProps {
   content: string
   citations?: Citation[]
   confidence?: number
+  agents_used?: string[]  // NEW: which agents contributed
   timestamp?: Date
   isLoading?: boolean
 }
@@ -18,6 +19,7 @@ export default function MessageBubble({
   content,
   citations,
   confidence,
+  agents_used,
   timestamp,
   isLoading,
 }: MessageBubbleProps) {
@@ -45,23 +47,44 @@ export default function MessageBubble({
         >
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{content}</p>
 
-          {/* Confidence score for assistant */}
-          {!isUser && confidence !== undefined && (
-            <div className="mt-2 pt-2 border-t border-gray-300 flex items-center gap-2">
-              <span className="text-xs font-medium">Confidence:</span>
-              <div className="flex-1 bg-gray-200 rounded-full h-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    confidence > 0.8
-                      ? 'bg-green-500'
-                      : confidence > 0.6
-                        ? 'bg-yellow-500'
-                        : 'bg-red-500'
-                  }`}
-                  style={{ width: `${confidence * 100}%` }}
-                />
-              </div>
-              <span className="text-xs font-semibold">{(confidence * 100).toFixed(0)}%</span>
+          {/* Agents used and Confidence score for assistant */}
+          {!isUser && (agents_used || confidence !== undefined) && (
+            <div className="mt-2 pt-2 border-t border-gray-300 space-y-2">
+              {/* Agents */}
+              {agents_used && agents_used.length > 0 && (
+                <div className="flex items-start gap-2 flex-wrap">
+                  <span className="text-xs font-medium text-gray-700">Agents:</span>
+                  <div className="flex flex-wrap gap-1">
+                    {agents_used.map((agent) => (
+                      <span
+                        key={agent}
+                        className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full"
+                      >
+                        {agent.replace('_', ' ')}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Confidence */}
+              {confidence !== undefined && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium">Confidence:</span>
+                  <div className="flex-1 bg-gray-200 rounded-full h-2 max-w-xs">
+                    <div
+                      className={`h-2 rounded-full transition-all ${
+                        confidence > 0.8
+                          ? 'bg-green-500'
+                          : confidence > 0.6
+                            ? 'bg-yellow-500'
+                            : 'bg-red-500'
+                      }`}
+                      style={{ width: `${confidence * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-xs font-semibold">{(confidence * 100).toFixed(0)}%</span>
+                </div>
+              )}
             </div>
           )}
         </div>

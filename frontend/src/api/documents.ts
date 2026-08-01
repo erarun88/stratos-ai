@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPatch, apiPostForm, apiUrl } from './client'
+import { apiDelete, apiGet, apiPatch, apiPost, apiPostForm, apiUrl } from './client'
 import type {
   Document,
   DocumentFilters,
@@ -58,4 +58,8 @@ export function deleteDocument(id: number): Promise<void> {
 /** Direct link the browser downloads; the API sets Content-Disposition. */
 export function documentDownloadUrl(id: number): string {
   return apiUrl(`/documents/${id}/download`)
+}
+
+export function retryDocumentEmbedding(id: number): Promise<Document> {
+  return apiPost<Document>(`/documents/${id}/retry-embedding`, {})
 }

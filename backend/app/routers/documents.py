@@ -312,8 +312,8 @@ def get_embedding_status(
     session: Session = Depends(get_session),
 ):
     """Get embedding status of a document.
-    
-    Returns how many chunks were created, token count, processing cost, 
+
+    Returns how many chunks were created, token count, processing cost,
     and any errors that occurred.
     """
     doc = session.get(Document, document_id)
@@ -336,3 +336,23 @@ def get_embedding_status(
         embedded_at=doc.embedded_at.isoformat() if doc.embedded_at else None,
         error=doc.embedding_error,
     )
+
+
+@router.post("/{document_id}/retry-embedding", response_model=DocumentResponse)
+def retry_document_embedding(
+    document_id: int,
+    session: Session = Depends(get_session),
+):
+    """Retry embedding a document that previously failed.
+
+    Resets the embedding status to 'queued' and triggers re-embedding.
+    """
+    from app.services.document_embedding_service import reset_document_embedding, DocumentEmbeddingError
+
+    try:
+        reset_document_embedding(session, document_id)
+        document = document_service.get_document(session, document_id)
+    except DocumentEmbeddingError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+
+    return document_service.to_response(document)

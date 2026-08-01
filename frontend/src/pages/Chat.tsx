@@ -12,9 +12,9 @@ export default function Chat() {
     <div className="flex flex-col h-full">
       {/* Page header */}
       <div className="border-b bg-gray-50 p-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">ProjectAgent</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">StratOS AI Assistant</h1>
         <p className="text-gray-600">
-          Ask questions about your projects. Get instant answers powered by AI with source citations.
+          Multi-agent AI system: Ask about projects, risks, schedules, and documents. Get intelligent answers from specialized agents working in parallel.
         </p>
       </div>
 

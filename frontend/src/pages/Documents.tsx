@@ -3,6 +3,7 @@ import {
   deleteDocument,
   documentDownloadUrl,
   getDocuments,
+  retryDocumentEmbedding,
   updateDocument,
   uploadDocument,
 } from '../api/documents'
@@ -16,6 +17,7 @@ import type {
 import { DOCUMENT_TYPE_OPTIONS, formatFileSize } from '../types/document'
 import type { Project } from '../types/project'
 import DocumentTypeBadge from '../components/documents/DocumentTypeBadge'
+import EmbeddingStatusBadge from '../components/documents/EmbeddingStatusBadge'
 import DocumentUploadModal from '../components/documents/DocumentUploadModal'
 import DocumentEditModal from '../components/documents/DocumentEditModal'
 import DeleteDocumentModal from '../components/documents/DeleteDocumentModal'
@@ -52,6 +54,7 @@ export default function Documents() {
   const [uploadOpen, setUploadOpen] = useState(false)
   const [editing, setEditing] = useState<Document | null>(null)
   const [deleting, setDeleting] = useState<Document | null>(null)
+  const [retrying, setRetrying] = useState<number | null>(null)
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300)
@@ -114,6 +117,16 @@ export default function Documents() {
       setPage(page - 1)
     } else {
       await loadDocuments()
+    }
+  }
+
+  async function handleRetryEmbedding(documentId: number) {
+    setRetrying(documentId)
+    try {
+      await retryDocumentEmbedding(documentId)
+      await loadDocuments()
+    } finally {
+      setRetrying(null)
     }
   }
 
@@ -244,6 +257,7 @@ export default function Documents() {
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Customer</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Size</th>
                   <th className="px-4 py-3 text-left font-medium text-slate-500">Uploaded</th>
+                  <th className="px-4 py-3 text-left font-medium text-slate-500">Embedding</th>
                   <th className="px-4 py-3 text-right font-medium text-slate-500">Actions</th>
                 </tr>
               </thead>
@@ -262,7 +276,20 @@ export default function Documents() {
                     <td className="px-4 py-3 text-slate-600">{formatFileSize(doc.file_size)}</td>
                     <td className="px-4 py-3 text-slate-600">{formatDateTime(doc.created_at)}</td>
                     <td className="px-4 py-3">
+                      <EmbeddingStatusBadge status={doc.embedding_status} error={doc.embedding_error} />
+                    </td>
+                    <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
+                        {doc.embedding_status === 'failed' && (
+                          <button
+                            type="button"
+                            onClick={() => handleRetryEmbedding(doc.id)}
+                            disabled={retrying === doc.id}
+                            className="rounded-md border border-amber-300 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                          >
+                            {retrying === doc.id ? 'Retrying…' : 'Retry'}
+                          </button>
+                        )}
                         <a
                           href={documentDownloadUrl(doc.id)}
                           download={doc.filename}

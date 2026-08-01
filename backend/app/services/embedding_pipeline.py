@@ -295,7 +295,11 @@ class EmbeddingPipeline:
 
         doc = self.session.get(Document, checkpoint.document_id)
         storage = get_document_storage()
-        pdf_bytes = storage.open(doc.storage_key)
+        pdf_file = storage.open(doc.storage_key)
+        try:
+            pdf_bytes = pdf_file.read()
+        finally:
+            pdf_file.close()
         text = extract_text_from_pdf(pdf_bytes)
 
         checkpoint.extracted_text = text

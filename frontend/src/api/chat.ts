@@ -14,6 +14,7 @@ export interface ChatResponse {
   citations: Citation[]
   confidence: number
   response_mode: string
+  agents_used?: string[]  // NEW: which agents contributed
   metadata?: Record<string, any>
 }
 

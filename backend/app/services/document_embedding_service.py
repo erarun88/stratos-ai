@@ -90,7 +90,11 @@ def embed_document(session: Session, document_id: int) -> bool:
         extract_start = time.time()
 
         storage = get_document_storage()
-        pdf_bytes = storage.open(doc.storage_key)
+        pdf_file = storage.open(doc.storage_key)
+        try:
+            pdf_bytes = pdf_file.read()
+        finally:
+            pdf_file.close()
         text = extract_text_from_pdf(pdf_bytes)
 
         extract_duration = int((time.time() - extract_start) * 1000)

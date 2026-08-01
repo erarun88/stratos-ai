@@ -179,6 +179,12 @@ def to_response(document: Document) -> DocumentResponse:
         storage_backend=document.storage_backend,
         created_at=document.created_at,
         updated_at=document.updated_at,
+        embedding_status=document.embedding_status,
+        embedding_model=document.embedding_model,
+        token_count=document.token_count,
+        embedding_cost=document.embedding_cost,
+        embedded_at=document.embedded_at,
+        embedding_error=document.embedding_error,
     )
 
 

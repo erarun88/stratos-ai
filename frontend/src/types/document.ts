@@ -23,6 +23,12 @@ export interface Document {
   storage_backend: string
   created_at: string | null
   updated_at: string | null
+  embedding_status: string | null
+  embedding_model: string | null
+  token_count: number | null
+  embedding_cost: number | null
+  embedded_at: string | null
+  embedding_error: string | null
 }
 
 /** Paginated envelope returned by GET /documents. */

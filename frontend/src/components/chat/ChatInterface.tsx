@@ -13,6 +13,7 @@ interface Message {
   content: string
   citations?: Citation[]
   confidence?: number
+  agents_used?: string[]  // NEW: which agents contributed
   timestamp: Date
 }
 
@@ -70,6 +71,7 @@ export default function ChatInterface({ projectId }: ChatInterfaceProps) {
         content: response.answer,
         citations: response.citations,
         confidence: response.confidence,
+        agents_used: response.agents_used,
         timestamp: new Date(),
       }
 
@@ -103,8 +105,8 @@ export default function ChatInterface({ projectId }: ChatInterfaceProps) {
       <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4 border-b">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold">ProjectAgent</h2>
-            <p className="text-sm text-blue-100">AI Assistant for Project Intelligence</p>
+            <h2 className="text-xl font-bold">StratOS AI Assistant</h2>
+            <p className="text-sm text-blue-100">Multi-agent system (Project • Risk • Schedule • Document)</p>
           </div>
           {messages.length > 0 && (
             <button
@@ -159,6 +161,7 @@ export default function ChatInterface({ projectId }: ChatInterfaceProps) {
                 content={message.content}
                 citations={message.citations}
                 confidence={message.confidence}
+                agents_used={message.agents_used}
                 timestamp={message.timestamp}
               />
             ))}

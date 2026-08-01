@@ -27,7 +27,7 @@ from app.agents.base_agent import Agent, AgentResponse, Citation
 from app.agents.reflection_agent import ReflectionAgent
 from app.approvals import get_approval_manager, ApprovalType
 from app.ai.llm_client import LLMClient
-from app.execution_studio import ExecutionEvent, get_event_bus, get_event_store
+from app.execution_studio import ExecutionEvent, EventStatus, get_event_bus, get_event_store
 
 logger = logging.getLogger(__name__)
 
@@ -217,7 +217,7 @@ class SupervisorAgent:
                     request_id=request_id,
                     component="SupervisorAgent",
                     action="answer",
-                    status="completed",
+                    status=EventStatus.COMPLETED,
                     duration_ms=elapsed_ms,
                     metadata={"agents_used": list(responses.keys())}
                 )
@@ -241,7 +241,7 @@ class SupervisorAgent:
                     request_id=request_id,
                     component="SupervisorAgent",
                     action="answer",
-                    status="failed",
+                    status=EventStatus.FAILED,
                     error=str(e),
                     duration_ms=(time.time() - start_time) * 1000
                 )

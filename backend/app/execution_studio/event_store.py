@@ -272,14 +272,21 @@ class EventStore:
             cutoff = datetime.utcnow() - timedelta(hours=hours)
 
             with Session(engine) as session:
-                results = (
-                    session.query(ExecutionEventModel.request_id)
+                # Use subquery to get distinct request_ids ordered by most recent event
+                from sqlalchemy import func
+                subq = (
+                    session.query(
+                        ExecutionEventModel.request_id,
+                        func.max(ExecutionEventModel.created_at).label('max_created')
+                    )
                     .filter(ExecutionEventModel.created_at >= cutoff)
-                    .distinct()
-                    .order_by(ExecutionEventModel.created_at.desc())
+                    .group_by(ExecutionEventModel.request_id)
+                    .order_by(func.max(ExecutionEventModel.created_at).desc())
                     .limit(limit)
-                    .all()
+                    .subquery()
                 )
+
+                results = session.query(subq.c.request_id).all()
                 return [r[0] for r in results]
         except Exception as e:
             logger.error(f"Failed to get recent requests: {e}", exc_info=True)

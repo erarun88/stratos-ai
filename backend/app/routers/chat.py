@@ -30,7 +30,7 @@ from app.agents import (
     SupervisorAgent,
 )
 from app.agents.agent_registry import get_agent_registry, init_default_agents
-from app.execution_studio import ExecutionEvent, get_event_bus, get_event_store
+from app.execution_studio import ExecutionEvent, EventStatus, get_event_bus, get_event_store
 
 logger = logging.getLogger(__name__)
 
@@ -218,7 +218,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             request_id=request_id,
             component="ChatEndpoint",
             action="return_response",
-            status="completed",
+            status=EventStatus.COMPLETED,
             duration_ms=elapsed_ms,
             metadata={"agents_used": response.agents_used}
         )
@@ -240,7 +240,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
             request_id=request_id,
             component="ChatEndpoint",
             action="return_response",
-            status="failed",
+            status=EventStatus.FAILED,
             error=str(e),
             duration_ms=(time.time() - start_time) * 1000
         )

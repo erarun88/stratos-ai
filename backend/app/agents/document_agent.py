@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 from app.agents.base_agent import Agent, AgentResponse
 from app.ai.guardrails import Guardrails
 from app.tools.semantic_search_tool import SemanticSearchTool
+from app.execution_studio import auto_trace, emit_event
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ For financial analysis, refer to the Finance Agent.
 For risk assessment, refer to the Risk Agent.
 """
 
+    @auto_trace(component="DocumentAgent", action="answer_query")
     async def answer(
         self,
         query: str,
@@ -79,12 +81,18 @@ For risk assessment, refer to the Risk Agent.
         logger.info(f"DocumentAgent.answer: {query[:100]}...")
 
         try:
-            # Step 1: Determine tools
+            # Step 1: Determine tools to use
+            emit_event("DocumentAgent", "determine_tools")
             tool_calls = await self._determine_tools(query, project_id)
+            logger.debug(f"Tool calls: {[t['tool'] for t in tool_calls]}")
+            emit_event("DocumentAgent", "tools_selected", metadata={"tool_count": len(tool_calls)})
 
             # Step 2: Execute semantic search
+            emit_event("DocumentAgent", "execute_tools")
             tool_results = await self._execute_tools(tool_calls)
             tool_names = [t["tool"] for t in tool_calls]
+            logger.debug(f"Tool results: {len(tool_results)} tools executed")
+            emit_event("DocumentAgent", "tools_executed", metadata={"tool_count": len(tool_names)})
 
             if not tool_results:
                 answer = "No relevant documents found for this query."
@@ -98,9 +106,13 @@ For risk assessment, refer to the Risk Agent.
                 )
 
             # Step 3: Build context from documents
+            emit_event("DocumentAgent", "build_context")
             context = self._build_context(tool_results)
+            context_length = len(context)
+            emit_event("DocumentAgent", "context_built", metadata={"context_length": context_length})
 
             # Step 4: Generate response grounded in documents
+            emit_event("DocumentAgent", "invoke_llm")
             system_prompt = self.get_system_prompt()
             llm_response = await self.llm_client.generate(
                 messages=[
@@ -111,16 +123,25 @@ For risk assessment, refer to the Risk Agent.
                 ],
                 system_prompt=system_prompt,
             )
+            emit_event("DocumentAgent", "llm_response_received", metadata={"response_length": len(llm_response)})
 
             # Step 5: Extract citations (critical for document agent)
+            emit_event("DocumentAgent", "extract_citations")
             citations = self._extract_document_citations(tool_results, llm_response)
+            emit_event("DocumentAgent", "citations_extracted", metadata={"citation_count": len(citations)})
 
             # Step 6: Apply strict guardrails
+            emit_event("DocumentAgent", "apply_guardrails")
             grounding_ok, grounding_score, _ = self.guardrails.ground_response(
                 llm_response, context
             )
             hallucination_risk, _ = self.guardrails.check_hallucination(llm_response, context)
             confidence = self._calculate_confidence(hallucination_risk, grounding_ok, len(tool_names))
+            emit_event("DocumentAgent", "guardrails_applied", metadata={
+                "grounding_ok": grounding_ok,
+                "hallucination_risk": hallucination_risk,
+                "confidence": confidence
+            })
 
             logger.info(
                 f"DocumentAgent response: grounding={grounding_ok}, "

@@ -15,6 +15,22 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/projects': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/engineers': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/dashboard': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/documents': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
 })

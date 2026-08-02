@@ -61,14 +61,33 @@ from app.execution_studio.trace_context import (
     set_request_id,
     get_request_id,
     clear_request_id,
+    push_event_id,
+    pop_event_id,
+    get_parent_event_id,
+    clear_event_stack,
 )
 from app.execution_studio.auto_tracer import (
     auto_trace,
     emit_event,
 )
+from app.execution_studio.semantic_event import (
+    SemanticExecutionEvent,
+    ComponentType,
+    RelationshipType,
+    InputSummary,
+    OutputSummary,
+)
+from app.execution_studio.semantic_event_store import (
+    SemanticEventStore,
+    get_semantic_event_store,
+)
+from app.execution_studio.semantic_tracer import (
+    SemanticTracer,
+    trace_semantic_operation,
+)
 
 __all__ = [
-    # Event Model
+    # Event Model (Old)
     "ExecutionEvent",
     "EventStatus",
     "TraceMetrics",
@@ -81,12 +100,12 @@ __all__ = [
     "get_event_bus",
     "publish_event",
 
-    # Event Store
+    # Event Store (Old)
     "EventStore",
     "ExecutionEventModel",
     "get_event_store",
 
-    # Tracer
+    # Tracer (Old)
     "Tracer",
     "trace_execution",
     "TracingContextManager",
@@ -95,8 +114,23 @@ __all__ = [
     "set_request_id",
     "get_request_id",
     "clear_request_id",
+    "push_event_id",
+    "pop_event_id",
+    "get_parent_event_id",
+    "clear_event_stack",
     "auto_trace",
     "emit_event",
+
+    # Semantic Events (New)
+    "SemanticExecutionEvent",
+    "ComponentType",
+    "RelationshipType",
+    "InputSummary",
+    "OutputSummary",
+    "SemanticEventStore",
+    "get_semantic_event_store",
+    "SemanticTracer",
+    "trace_semantic_operation",
 
     # Learning
     "ComponentExplanation",

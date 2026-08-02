@@ -13,7 +13,12 @@ from typing import Any, Callable, Optional
 from app.execution_studio.event_model import ExecutionEvent, EventStatus
 from app.execution_studio.event_bus import get_event_bus
 from app.execution_studio.event_store import get_event_store
-from app.execution_studio.trace_context import get_request_id
+from app.execution_studio.trace_context import (
+    get_request_id,
+    get_parent_event_id,
+    push_event_id,
+    pop_event_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,16 +55,20 @@ def auto_trace(
                 bus = get_event_bus()
                 store = get_event_store()
                 start_time = time.time()
+                event_id = None
 
                 # Publish start event
                 if request_id:
                     start_event = ExecutionEvent(
                         request_id=request_id,
+                        parent_event_id=get_parent_event_id(),
                         component=component,
                         action=action,
                         metadata={"function": func.__name__}
                     )
+                    event_id = start_event.event_id
                     bus.publish(start_event)
+                    push_event_id(str(event_id))  # Push as parent for nested events
 
                 try:
                     # Execute function
@@ -69,7 +78,9 @@ def auto_trace(
                     if request_id:
                         elapsed_ms = (time.time() - start_time) * 1000
                         end_event = ExecutionEvent(
+                            event_id=event_id,
                             request_id=request_id,
+                            parent_event_id=get_parent_event_id(),
                             component=component,
                             action=action,
                             status=EventStatus.COMPLETED,
@@ -89,7 +100,9 @@ def auto_trace(
                     if request_id:
                         elapsed_ms = (time.time() - start_time) * 1000
                         error_event = ExecutionEvent(
+                            event_id=event_id,
                             request_id=request_id,
+                            parent_event_id=get_parent_event_id(),
                             component=component,
                             action=action,
                             status=EventStatus.FAILED,
@@ -104,6 +117,11 @@ def auto_trace(
                         store.store_event(error_event)
 
                     raise
+
+                finally:
+                    # Pop the event ID from the stack when done
+                    if event_id:
+                        pop_event_id()
 
             return async_wrapper
         else:
@@ -113,16 +131,20 @@ def auto_trace(
                 bus = get_event_bus()
                 store = get_event_store()
                 start_time = time.time()
+                event_id = None
 
                 # Publish start event
                 if request_id:
                     start_event = ExecutionEvent(
                         request_id=request_id,
+                        parent_event_id=get_parent_event_id(),
                         component=component,
                         action=action,
                         metadata={"function": func.__name__}
                     )
+                    event_id = start_event.event_id
                     bus.publish(start_event)
+                    push_event_id(str(event_id))  # Push as parent for nested events
 
                 try:
                     # Execute function
@@ -132,7 +154,9 @@ def auto_trace(
                     if request_id:
                         elapsed_ms = (time.time() - start_time) * 1000
                         end_event = ExecutionEvent(
+                            event_id=event_id,
                             request_id=request_id,
+                            parent_event_id=get_parent_event_id(),
                             component=component,
                             action=action,
                             status=EventStatus.COMPLETED,
@@ -152,7 +176,9 @@ def auto_trace(
                     if request_id:
                         elapsed_ms = (time.time() - start_time) * 1000
                         error_event = ExecutionEvent(
+                            event_id=event_id,
                             request_id=request_id,
+                            parent_event_id=get_parent_event_id(),
                             component=component,
                             action=action,
                             status=EventStatus.FAILED,
@@ -167,6 +193,11 @@ def auto_trace(
                         store.store_event(error_event)
 
                     raise
+
+                finally:
+                    # Pop the event ID from the stack when done
+                    if event_id:
+                        pop_event_id()
 
             return sync_wrapper
 
@@ -182,6 +213,8 @@ def emit_event(
     error: Optional[str] = None,
 ) -> bool:
     """Manually emit an execution event using request_id from context.
+
+    Sets parent_event_id automatically if there's a parent in the event stack.
 
     Args:
         component: Component name
@@ -203,6 +236,7 @@ def emit_event(
 
     event = ExecutionEvent(
         request_id=request_id,
+        parent_event_id=get_parent_event_id(),
         component=component,
         action=action,
         status=status,

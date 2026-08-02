@@ -102,6 +102,25 @@ For schedule impact, refer to the Schedule Agent.
                     execution_time_ms=(time.time() - start_time) * 1000,
                 )
 
+            # Check if any actual risk data was found
+            has_risk_data = False
+            for result in (tool_results if isinstance(tool_results, list) else tool_results.values()):
+                if result.success and result.data:
+                    if isinstance(result.data, dict) and result.data.get("risk_count", 0) > 0:
+                        has_risk_data = True
+                        break
+
+            if not has_risk_data:
+                answer = "No risks have been documented for this project yet. Please add risk information through the project management interface if you have identified any risks."
+                return await self.create_response(
+                    answer=answer,
+                    citations=[],
+                    confidence=0.95,
+                    tool_calls=tool_names,
+                    context_length=0,
+                    execution_time_ms=(time.time() - start_time) * 1000,
+                )
+
             # Step 3: Build context
             emit_event("RiskAgent", "build_context")
             context = self._build_context(tool_results)

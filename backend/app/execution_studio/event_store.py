@@ -221,14 +221,26 @@ class EventStore:
 
                 # Calculate metrics
                 total_tokens = sum(e.tokens_used for e in events)
+                # Also extract tokens from metadata if present
+                for e in events:
+                    if e.metadata_json and "tokens_used" in e.metadata_json:
+                        total_tokens += e.metadata_json.get("tokens_used", 0)
+
                 total_cost = sum(e.cost for e in events)
+                # Also extract cost from metadata if present
+                for e in events:
+                    if e.metadata_json and "cost" in e.metadata_json:
+                        total_cost += e.metadata_json.get("cost", 0.0)
+
                 components = set(e.component for e in events)
                 agents = set(
                     e.component for e in events if "Agent" in e.component
                 )
-                tools = set(
-                    e.component for e in events if "Tool" in e.component
+                # Count tool executions (actions with "execute_tools" or "tool" in action name)
+                tool_events = set(
+                    e.action for e in events if "tool" in e.action.lower()
                 )
+                tool_count = len(tool_events)
                 errors = len([e for e in events if e.status == "failed"])
 
                 # Calculate total duration
@@ -247,7 +259,7 @@ class EventStore:
                     component_count=len(components),
                     event_count=len(events),
                     agent_count=len(agents),
-                    tool_count=len(tools),
+                    tool_count=tool_count,
                     errors=errors,
                 )
         except Exception as e:

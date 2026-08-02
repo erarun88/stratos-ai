@@ -181,6 +181,7 @@ async def chat(request: ChatRequest) -> ChatResponse:
         metadata={"query": request.query, "project_id": request.project_id}
     )
     bus.publish(start_event)
+    store.store_event(start_event)
 
     try:
         supervisor = get_supervisor()

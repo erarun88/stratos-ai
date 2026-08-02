@@ -113,6 +113,7 @@ class SupervisorAgent:
                 metadata={"query": query}
             )
             bus.publish(start_event)
+            store.store_event(start_event)
 
         try:
             # Step 1: Determine which agents to invoke
@@ -128,6 +129,7 @@ class SupervisorAgent:
                     metadata={"selected_agents": agent_domains}
                 )
                 bus.publish(select_event)
+                store.store_event(select_event)
 
             if not agent_domains:
                 return {

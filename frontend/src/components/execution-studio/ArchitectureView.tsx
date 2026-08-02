@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import LearnMode from './LearnMode'
 import BeforeAfterView from './BeforeAfterView'
 import InteractiveReplayView from './InteractiveReplayView'
+import MemoryLane from './MemoryLane'
 
 interface Component {
   id: string
@@ -48,7 +49,7 @@ export default function ArchitectureView({ requestId }: ArchitectureViewProps) {
   const [selectedComponent, setSelectedComponent] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'details' | 'learn' | 'before-after' | 'replay'>('details')
+  const [viewMode, setViewMode] = useState<'details' | 'learn' | 'before-after' | 'replay' | 'memory'>('details')
   const [highlightedComponent, setHighlightedComponent] = useState<string | null>(null)
 
   useEffect(() => {
@@ -306,6 +307,16 @@ export default function ArchitectureView({ requestId }: ArchitectureViewProps) {
                 >
                   ▶️ Replay
                 </button>
+                <button
+                  onClick={() => setViewMode('memory')}
+                  className={`px-2 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                    viewMode === 'memory'
+                      ? 'text-blue-600 border-b-2 border-blue-600'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  💾 Memory
+                </button>
               </div>
 
               {/* Details View */}
@@ -366,6 +377,11 @@ export default function ArchitectureView({ requestId }: ArchitectureViewProps) {
                   requestId={requestId}
                   onComponentHighlight={setHighlightedComponent}
                 />
+              )}
+
+              {/* Memory Lane View */}
+              {viewMode === 'memory' && (
+                <MemoryLane requestId={requestId} />
               )}
             </div>
           ) : (

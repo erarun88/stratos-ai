@@ -80,6 +80,10 @@ app.include_router(approvals_router.router)
 from app.routers import execution_studio_api as execution_studio_router
 app.include_router(execution_studio_router.router)
 
+# Enterprise Memory module (Intelligent organizational learning)
+from app.routers import memory_api as memory_router
+app.include_router(memory_router.router)
+
 # Projects module
 from app.routers import projects as projects_router
 app.include_router(projects_router.router)
